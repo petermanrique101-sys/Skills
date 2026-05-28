@@ -1,0 +1,10 @@
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.vscode/
+.idea/
+
+# Local-only skill drafts — prefix a skill folder with `_` to keep it untracked
+_*/
