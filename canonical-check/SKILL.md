@@ -13,104 +13,65 @@ allowed-tools:
 
 # /canonical-check — Don't fork a new system; extend the canonical one
 
-The repo has paid the cost of parallel implementations twice already
-(the agent-loop collapse into `src/canonical-loop/` and the WS-stream
-collapse into `src/chat-ws/`). The user's rule:
+The repo has paid the cost of parallel implementations twice already (the agent-loop collapse into `src/canonical-loop/` and the WS-stream collapse into `src/chat-ws/`). The user's rule:
 
-> **Every subsystem has one source of truth. New work extends it. No
-> forks, no parallels, no "temporary" second versions.**
+> Every subsystem has one source of truth. New work extends it. No forks, no parallels, no "temporary" second versions.
 
-This skill is the gate that enforces that rule **before code gets
-written**, not after.
+This skill is the gate that enforces that rule **before** code gets written, not after.
 
 ## When this fires
 
-Run this skill (with no prompting from the user) at the start of any
-task that:
+Run this skill (with no prompting from the user) at the start of any task that:
 
-- Introduces a new file under `src/` that owns a subsystem-level
-  responsibility (loop driving, stream emission, tool registration,
-  memory mutation, session persistence, provider IO, sandbox lifecycle,
-  settings resolution, auth resolution).
-- Touches a file matching `**/{loop,stream,registry,client,session,
-  memory,sandbox,settings,auth}*.ts` — these are subsystem anchors.
-- The user describes the work with words like "new", "another",
-  "separate", "parallel", "lightweight version of", "stripped-down",
-  "my own".
-- The user references a subsystem by name ("the chat stream", "the
-  agent loop", "tool dispatch", "memory writes") and is about to
-  modify it.
+- Introduces a new file under `src/` that owns a subsystem-level responsibility (loop driving, stream emission, tool registration, memory mutation, session persistence, provider IO, sandbox lifecycle, settings resolution, auth resolution).
+- Touches a file matching `**/{loop,stream,registry,client,session,memory,sandbox,settings,auth}*.ts` — these are subsystem anchors.
+- The user describes the work with words like "new", "another", "separate", "parallel", "lightweight version of", "stripped-down", "my own".
+- The user references a subsystem by name ("the chat stream", "the agent loop", "tool dispatch", "memory writes") and is about to modify it.
 
-You can also run on explicit invocation `/canonical-check <description
-of planned change>`.
+You can also run on explicit invocation `/canonical-check <description of planned change>`.
 
 ## What this skill does
 
 It is a **read-only preflight**. It produces one of three verdicts:
 
-- **EXTEND** — a canonical module exists; the new work must hook into
-  it. Report names the module, the extension point, and what the diff
-  should look like.
-- **ADAPTER** — a canonical module exists but for a different
-  transport/surface than the new work. The new work is a legitimate
-  adapter on top of the canonical. Report names the canonical core to
-  call into and the adapter pattern already used by siblings.
-- **NEW** — no canonical exists. The new work is genuinely
-  greenfield. Report names what it must become the canonical for, and
-  where it should live so the next person finds it.
+- **EXTEND** — a canonical module exists; the new work must hook into it. Report names the module, the extension point, and what the diff should look like.
+- **ADAPTER** — a canonical module exists but for a different transport/surface than the new work. The new work is a legitimate adapter on top of the canonical. Report names the canonical core to call into and the adapter pattern already used by siblings.
+- **NEW** — no canonical exists. The new work is genuinely greenfield. Report names what it must become the canonical for, and where it should live so the next person finds it.
 
-You do not write code in this skill. You produce the verdict and
-hand control back. The user (or the agent doing the implementation)
-then proceeds with the verdict in hand.
+You do **not** write code in this skill. You produce the verdict and hand control back. The user (or the agent doing the implementation) then proceeds with the verdict in hand.
 
 ## The procedure
 
 ### 1. Restate the planned work in one sentence
 
-Before searching, write one sentence: "The work is to <verb> <what>
-that <does>." If you can't write that sentence, ask the user to
-clarify in one question and stop.
+Before searching, write one sentence: "The work is to <verb> <noun> that <constraint>." If you can't write that sentence, ask the user to clarify in one question and stop.
 
 ### 2. Identify the subsystem axis
 
-Map the work to one of the known subsystem axes (the same list
-`/find-duplicate-systems` uses):
+Map the work to one of the known subsystem axes (the same list `/find-duplicate-systems` uses):
 
-1. Agent / tool-call loop
-2. Chat / message streaming transport
-3. Tool registry / dispatch
-4. Memory writer
-5. Provider client
-6. Session / conversation state
-7. Auth / credential resolver
-8. Sandbox / workspace lifecycle
-9. Settings / config reader
-10. WebSocket / IPC server endpoint
-11. **Other** — if the work doesn't fit any of the above, name a new
-    axis and proceed; new axes are how greenfield work gets a NEW
-    verdict legitimately.
+- Agent / tool-call loop
+- Chat / message streaming transport
+- Tool registry / dispatch
+- Memory writer
+- Provider client
+- Session / conversation state
+- Auth / credential resolver
+- Sandbox / workspace lifecycle
+- Settings / config reader
+- WebSocket / IPC server endpoint
+- **Other** — if the work doesn't fit any of the above, name a new axis and proceed; new axes are how greenfield work gets a NEW verdict legitimately.
 
 ### 3. Locate the canonical
 
-Don't trust memory — memories about file paths go stale. Verify:
+Don't trust memory — memories about file paths go stale. **Verify:**
 
-- `Glob` the expected anchor (`src/canonical-loop/`, `src/chat-ws/`,
-  `src/ari-kernel/`, `src/auth/`, `src/session/`, `src/sandbox/`,
-  `src/conversation/`, etc.). The repo has been consolidating into
-  named subsystem directories — that's the pattern.
-- `Grep` for the responsibility verbs from step 1 (e.g., "tool call",
-  "ws.send", "memory.append", "registerTool") within `src/`.
-- Read the top of the most-imported file in the matching directory
-  to confirm it's the canonical entry point, not a sibling helper.
-- If multiple candidates surface, that's a duplication smell of its
-  own — surface it and recommend running `/find-duplicate-systems` on
-  that axis before proceeding.
+- Glob the expected anchor (`src/canonical-loop/`, `src/chat-ws/`, `src/ari-kernel/`, `src/auth/`, `src/session/`, `src/sandbox/`, `src/conversation/`, etc.). The repo has been consolidating into named subsystem directories — that's the pattern.
+- Grep for the responsibility verbs from step 1 (e.g., `"tool call"`, `"ws.send"`, `"memory.append"`, `"registerTool"`) within `src/`.
+- Read the top of the most-imported file in the matching directory to confirm it's the canonical entry point, not a sibling helper.
+- If multiple candidates surface, that's a duplication smell of its own — surface it and recommend running `/find-duplicate-systems` on that axis before proceeding.
 
-For deep / ambiguous lookups, delegate to a single `Explore` sub-agent
-(breadth `"medium"`) with: "Find the canonical module in this repo
-that owns: <responsibility>. Report path + entry function + top 3
-callers. If two modules both look canonical, name both." Don't fan
-out — this is one targeted lookup, not an audit.
+For deep / ambiguous lookups, delegate to a **single** Explore sub-agent (breadth "medium") with: "Find the canonical module in this repo that owns: <responsibility>. Report path + entry function + top 3 callers. If two modules both look canonical, name both." Don't fan out — this is one targeted lookup, not an audit.
 
 ### 4. Decide the verdict
 
@@ -131,8 +92,7 @@ Did you find a module that owns this exact responsibility?
          └─ No  → NEW (and name the canonical home)
 ```
 
-The default verdict is **EXTEND**. NEW requires evidence that nothing
-on the axis exists.
+The default verdict is **EXTEND**. NEW requires evidence that nothing on the axis exists.
 
 ### 5. Produce the verdict report
 
@@ -160,58 +120,34 @@ Forbidden:
   default move, named explicitly so it doesn't happen by accident>
 ```
 
-Keep the report to ~15 lines. The point is to make the right path
-obvious, not to write a design doc.
+Keep the report to **~15 lines**. The point is to make the right path obvious, not to write a design doc.
 
 ### 6. Hand back
 
-End with: "Proceed with the work above." Do not start implementing in
-this skill. The skill is the gate, not the build.
+End with: "Proceed with the work above." Do **not** start implementing in this skill. The skill is the gate, not the build.
 
 ## Anti-patterns this skill exists to prevent
 
-- **"I'll add a quick second handler just for X"** — that's how
-  `canonical-loop` ended up with siblings. The verdict is EXTEND;
-  add the case to the canonical handler.
-- **"This is different enough to deserve its own module"** — almost
-  never true at the subsystem level. Differences are options on the
-  canonical, not new modules.
-- **"The canonical is messy; I'll write a clean version next to it"**
-  — that creates two messy modules a month later. Verdict: EXTEND
-  with a refactor in place, or do `/refactor-godfiles` first.
-- **Treating shims as canonical** — a re-export barrel is not the
-  canonical; follow the re-exports to the real owner before naming
-  the extension point.
-- **Skipping verification because "I remember where it is"** — memory
-  goes stale, files move, paths get consolidated. Always Glob + Grep
-  before reporting the verdict.
+- **"I'll add a quick second handler just for X"** — that's how `canonical-loop` ended up with siblings. The verdict is EXTEND; add the case to the canonical handler.
+- **"This is different enough to deserve its own module"** — almost never true at the subsystem level. Differences are options on the canonical, not new modules.
+- **"The canonical is messy; I'll write a clean version next to it"** — that creates two messy modules a month later. Verdict: EXTEND with a refactor in place, or do `/refactor-godfiles` first.
+- **Treating shims as canonical** — a re-export barrel is not the canonical; follow the re-exports to the real owner before naming the extension point.
+- **Skipping verification because "I remember where it is"** — memory goes stale, files move, paths get consolidated. Always Glob + Grep before reporting the verdict.
 
 ## Anti-patterns for this skill itself
 
-- Running on trivial one-file edits (typo fixes, copy changes, single
-  function rename). This skill is for **subsystem-level** work. Don't
-  spam the gate on every change.
-- Producing a verdict report longer than ~15 lines. The longer the
-  report, the more it reads like a design doc the user can argue with
-  instead of a gate.
-- Saying NEW without naming what axis the new subsystem will own
-  going forward. NEW without an axis is just a license to fork later.
-- Implementing the change in this skill. The skill ends with the
-  verdict. Implementation is the next step.
+- Running on trivial one-file edits (typo fixes, copy changes, single function rename). This skill is for **subsystem-level** work. Don't spam the gate on every change.
+- Producing a verdict report longer than ~15 lines. The longer the report, the more it reads like a design doc the user can argue with instead of a gate.
+- Saying NEW without naming what axis the new subsystem will own going forward. NEW without an axis is just a license to fork later.
+- Implementing the change in this skill. The skill ends with the verdict. Implementation is the next step.
 
 ## Relationship to other skills
 
-- **`/find-duplicate-systems`** — backward-looking. Audits what
-  duplication *already exists*. Run when consolidation is the goal.
-- **`/canonical-check`** (this) — forward-looking. Prevents new
-  duplication from being created. Run before any subsystem work.
-- **`/senior-engineer`** — the implementation methodology that runs
-  *after* this skill's verdict.
-- **`/refactor-godfiles`** — splits oversized files. If the canonical
-  is >400 LOC, recommend splitting it first rather than extending a
-  god file.
+- `/find-duplicate-systems` — **backward-looking**. Audits what duplication already exists. Run when consolidation is the goal.
+- `/canonical-check` (this) — **forward-looking**. Prevents new duplication from being created. Run before any subsystem work.
+- `/senior-engineer` — the implementation methodology that runs *after* this skill's verdict.
+- `/refactor-godfiles` — splits oversized files. If the canonical is >400 LOC, recommend splitting it first rather than extending a god file.
 
 ## One-liner
 
-> **Preflight gate. Before subsystem work: find the canonical, verdict
-> EXTEND / ADAPTER / NEW, name the extension point, hand back.**
+> Preflight gate. Before subsystem work: find the canonical, verdict EXTEND / ADAPTER / NEW, name the extension point, hand back.
