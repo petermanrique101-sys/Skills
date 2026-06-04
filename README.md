@@ -33,6 +33,7 @@ git push
 | --- | --- |
 | `app-build` | Stand up a new app from idea to shipped, spec-first, with a coding agent doing the implementation. |
 | `canonical-check` | Preflight gate before building or modifying any subsystem — locate the canonical module and force EXTEND / ADAPTER / NEW verdict. |
+| `docs-sync` | Autopilot that makes docs match code — gated team of agents audits every doc, adversarially verifies each defect before rewriting, generates the missing, deletes the dead. |
 | `find-duplicate-systems` | Multi-agent sweep for parallel implementations of the same subsystem. One source of truth audit. |
 | `grill-me` | Interview-style stress test of a plan or design until shared understanding. |
 | `refactor-godfiles` | Auto-pilot splitting of files over 400 LOC in batches of 3 with per-batch test gate. |
