@@ -32,6 +32,7 @@ git push
 | Skill | Purpose |
 | --- | --- |
 | `app-build` | Stand up a new app from idea to shipped, spec-first, with a coding agent doing the implementation. |
+| `blast-radius` | Change-impact preflight before editing a shared default/enum/config/policy — finds every consumer, flags cross-concern collateral, forces test triage. SAFE / REVIEW / COUPLED. |
 | `canonical-check` | Preflight gate before building or modifying any subsystem — locate the canonical module and force EXTEND / ADAPTER / NEW verdict. |
 | `docs-sync` | Autopilot that makes docs match code — gated team of agents audits every doc, adversarially verifies each defect before rewriting, generates the missing, deletes the dead. |
 | `find-duplicate-systems` | Multi-agent sweep for parallel implementations of the same subsystem. One source of truth audit. |
