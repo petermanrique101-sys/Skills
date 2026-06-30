@@ -36,6 +36,8 @@ git push
 | `canonical-check` | Preflight gate before building or modifying any subsystem — locate the canonical module and force EXTEND / ADAPTER / NEW verdict. |
 | `docs-sync` | Autopilot that makes docs match code — gated team of agents audits every doc, adversarially verifies each defect before rewriting, generates the missing, deletes the dead. |
 | `find-duplicate-systems` | Multi-agent sweep for parallel implementations of the same subsystem. One source of truth audit. |
+| `grand-daddy-brown` | Autonomous, parallel, multi-hour campaign over an EXISTING codebase — the for-hours evolution of `brownfield`. Conflict-graph scheduling, decide-engineering/park-product policy, refute every green, honest ledger. Never pushes. |
+| `grand-daddy-green` | Autonomous, parallel, multi-hour campaign to stand up a NEW app — the for-hours evolution of `app-build`. Spec + hidden scenario suite, serial scaffold then parallel features, tier-honest ledger. Never deploys. |
 | `grill-me` | Interview-style stress test of a plan or design until shared understanding. |
 | `refactor-godfiles` | Auto-pilot splitting of files over 400 LOC in batches of 3 with per-batch test gate. |
 | `senior-engineer` | Default methodology for non-trivial coding work — root-cause fixes, precise scope, production quality. |
