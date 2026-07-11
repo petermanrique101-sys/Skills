@@ -34,6 +34,7 @@ git push
 | `app-build` | Stand up a new app from idea to shipped, spec-first, with a coding agent doing the implementation. |
 | `blast-radius` | Change-impact preflight before editing a shared default/enum/config/policy — finds every consumer, flags cross-concern collateral, forces test triage. SAFE / REVIEW / COUPLED. |
 | `canonical-check` | Preflight gate before building or modifying any subsystem — locate the canonical module and force EXTEND / ADAPTER / NEW verdict. |
+| `delete-code` | Hunt for deletable code — dead exports, unreachable branches, redundant middleware, vestigial subsystems, over-abstraction — with a per-item safety proof from static import-graph + runtime evidence. Report-only ranked kill-list. |
 | `docs-sync` | Autopilot that makes docs match code — gated team of agents audits every doc, adversarially verifies each defect before rewriting, generates the missing, deletes the dead. |
 | `find-duplicate-systems` | Multi-agent sweep for parallel implementations of the same subsystem. One source of truth audit. |
 | `grand-daddy-brown` | Autonomous, parallel, multi-hour campaign over an EXISTING codebase — the for-hours evolution of `brownfield`. Conflict-graph scheduling, decide-engineering/park-product policy, refute every green, honest ledger. Never pushes. |
