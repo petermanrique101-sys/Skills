@@ -48,11 +48,23 @@ function defaultDocs() {
 function gitIgnored(paths) {
 	if (!paths.length) return new Set();
 	try {
-		const out = execFileSync("git", ["check-ignore", "--no-index", "--stdin"], { cwd: REPO, input: paths.join("\n"), encoding: "utf8" });
-		return new Set(out.split("\n").map((l) => l.trim()).filter(Boolean));
+		const out = execFileSync("git", ["check-ignore", "-v", "--no-index", "--stdin"], { cwd: REPO, input: paths.join("\n"), encoding: "utf8" });
+		return parseIgnored(out);
 	} catch (err) {
-		return new Set(String(err.stdout ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+		return parseIgnored(String(err.stdout ?? ""));
 	}
+}
+
+// `-v` lines are `source:line:pattern<TAB>path`. git sometimes reports a hit
+// with an EMPTY pattern for a missing directory; that is not a real ignore
+// rule, so only a non-empty pattern counts.
+function parseIgnored(out) {
+	const ignored = new Set();
+	for (const line of out.split("\n")) {
+		const m = line.match(/^[^:]+:\d+:(.*)\t(.+)$/);
+		if (m && m[1].trim()) ignored.add(m[2].trim());
+	}
+	return ignored;
 }
 
 const LINK = /\]\(([^)\s]+)\)/g;
