@@ -12,7 +12,8 @@
  * (per-machine paths). Put `doc-paths:ignore` on a line to exempt an
  * intentional example of a path that should not exist.
  *
- * Usage: node check-doc-paths.mjs [doc.md ...]
+ * Usage: node check-doc-paths.mjs [--verbose] [doc.md ...]
+ *   --verbose also lists gitignored paths the docs name (per-machine, not failures).
  * Default docs: AGENTS.md, CLAUDE.md, ARCHITECTURE.md, README.md, every nested
  * AGENTS.md / CLAUDE.md / README.md, and docs/**.md except history and ADRs.
  */
@@ -128,7 +129,7 @@ const real = misses.filter((m) => !ignored.has(m.path));
 // Gitignored paths are usually per-machine (workspace/, build output), so they
 // don't fail the check — but a deleted module can be gitignored too, so list them.
 const perMachine = misses.filter((m) => ignored.has(m.path));
-if (perMachine.length) {
+if (perMachine.length && process.argv.includes("--verbose")) {
 	console.warn(`Not on this machine, gitignored — confirm each is per-machine, not deleted:\n  ${perMachine.map((m) => `${m.where} → ${m.spec}`).join("\n  ")}`);
 }
 if (real.length) {
