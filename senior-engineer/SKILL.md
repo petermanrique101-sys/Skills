@@ -43,8 +43,20 @@ Before reading any file, restate the task in one sentence. If the user said
 "add feature X", what's the user-visible behavior, and what's explicitly out
 of scope?
 
-If the request is ambiguous in a way that materially changes the diff, ask
-**one** focused question. Don't ask three. Don't ask zero and guess.
+If the request is ambiguous, classify the ambiguity before deciding whether to
+ask:
+- **Engineering judgment** (implementation approach, which pattern to follow,
+  how to structure the fix, root cause vs. symptom) — decide it yourself.
+  Default to the fix a senior engineer would ship: the one that addresses the
+  class of problem, not just this instance. State the assumption in the final
+  summary; don't ask.
+- **Two real solutions with a genuine tradeoff** (different user-facing
+  behavior, different cost/risk/timeline, different product implications) —
+  this is the one case to bring to the user. Ask **one** focused question
+  naming both options and the tradeoff.
+- **Product, money, risk, or taste** — always ask; this isn't yours to decide.
+
+Don't ask three questions. Don't ask zero and silently make a product call.
 
 Watch for hidden scope:
 - "Rename this file" ≠ "refactor all its imports."
@@ -68,11 +80,24 @@ For unfamiliar codebases:
 
 The 5 minutes you spend reading saves 30 minutes of fixing a misaligned diff.
 
+**Check whether this needs a canonical-check first.** If the task introduces a
+new file that owns a subsystem-level responsibility, touches a file matching
+`**/{loop,stream,registry,client,session,memory,sandbox,settings,auth}*.ts`,
+or you're describing the work to yourself with words like "new", "another",
+"separate", "lightweight version of" — stop and run `/canonical-check` before
+planning the diff. Don't rely on the user to invoke it; self-trigger.
+
 ### 3. Diagnose the root cause
 
 When something's broken, find why — not just where. The model's instinct is to
 make the symptom go away. The senior move is to ask: **what invariant got
 violated, and why?**
+
+**Before writing any diff, write the root-cause sentence: "The invariant
+violated is `<X>`, because `<Y>`." If you can't write it yet, you haven't
+diagnosed the cause — keep reading, don't start editing.** This is what makes
+the tactical-patch branch below trustworthy: it only works if a real root
+cause was found first, not skipped past.
 
 Heuristics:
 - A check is failing → don't disable the check. Ask why it's failing.
@@ -84,8 +109,16 @@ Heuristics:
   abstraction or the missing one.
 
 If the root cause is out of scope (in another team's code, requires a refactor
-you weren't asked for), say so explicitly: "Root cause is X in <file>; quick
-fix is Y here. Want the proper fix or the tactical patch?"
+you weren't asked for), don't fold this into whatever approval is already in
+flight — stop and ask it as its own, unambiguous question: "Root cause is X in
+`<file>`; quick fix is Y here, but it doesn't fix the class of bug, just this
+instance. Want the proper fix or the tactical patch?" A "yes, looks good" to a
+broader plan does not count as approving this — the tactical-patch decision
+needs its own explicit yes. If the user picks the patch, ship it, but label it
+everywhere it's visible: the end-of-turn summary and the commit message both
+get a `TACTICAL PATCH — root cause not fixed: <what and where>` line. Never
+let a band-aid read as a finished fix later — to you re-reading it, to the
+user skimming a diff, or to whoever reads the commit next.
 
 ### 4. Plan the smallest correct change
 
@@ -98,6 +131,12 @@ Before editing:
   novel structures when there's a precedent two files over.
 - **Where do I verify this worked?** A test? A repro script? Driving the UI?
 
+If the change touches a shared anchor — a default, enum, config loader,
+capability set, policy table, or widely-imported constant/type — stop and run
+`/blast-radius` before editing, the same way step 2 self-triggers
+`/canonical-check`. The bullet above is a reminder to check, not a substitute
+for actually running it.
+
 If the change is non-obvious or touches >2 files, sketch the plan in 3-5 lines
 before editing. If it's a one-line fix, just do it.
 
@@ -108,7 +147,9 @@ Apply these defaults:
 - **Edit existing files over creating new ones.** A new file is a new place to
   maintain. Earn it.
 - **One responsibility per module.** No god files. If a file is creeping past
-  ~400 LOC, that's a smell — split it before adding more.
+  ~400 LOC, that's a smell — stop and run `/refactor-godfiles` on it (or split
+  it yourself) before adding more. Don't let the smell pass silently because
+  the current task is small.
 - **No dead code, no commented-out blocks, no TODO graveyards.** If it's
   unused, delete it. Git remembers.
 - **Validate at boundaries, trust the interior.** User input, external APIs,
@@ -146,7 +187,24 @@ needs your eyes on it."
 Type-checking and test suites verify code correctness, not feature
 correctness. Distinguish.
 
-### 7. Communicate the change
+### 7. Self-audit before you report
+
+Before writing the summary, check yourself against this list — don't skip it
+because the change felt small:
+
+- Did the canonical-check or blast-radius trigger conditions apply anywhere
+  above? If yes, did you actually run them, not just note that you should?
+- Is every file you touched inside the scope sentence from step 1? If not,
+  that's scope creep — cut it, or call it out explicitly as a deliberate
+  exception.
+- If you shipped a tactical patch, is the `TACTICAL PATCH` label ready to go
+  in both the summary and the commit message?
+- Did you verify at the level of the original ask (step 6), or are you about
+  to claim "done" on compile/type-check alone?
+
+If any answer is no, fix it before you write the summary — not after.
+
+### 8. Communicate the change
 
 End with a tight summary. The format that respects the reader's time:
 
@@ -154,8 +212,13 @@ End with a tight summary. The format that respects the reader's time:
 What changed: <one sentence, product-level not code-level>
 Where: <file:line refs>
 Why: <only if non-obvious from the diff>
+Verified: <how you confirmed it works — test run, repro, UI drive>
 What's next / what I didn't do: <if relevant>
 ```
+
+If this was a tactical patch rather than a root-cause fix, that line is not
+optional — lead with `TACTICAL PATCH — root cause not fixed: <what and
+where>` before the rest of the summary.
 
 No filler. No "I have now successfully implemented..." No restating the task.
 No emoji. The reader can see the diff — tell them what they can't see.
@@ -184,6 +247,12 @@ No emoji. The reader can see the diff — tell them what they can't see.
 
 - **Fixing the symptom.** Disabling a failing test, swallowing an error,
   adding a special case for "the one input that breaks." Find the cause.
+- **Letting an approved band-aid pass as a real fix.** Even if the user says
+  yes to the tactical patch, it still gets its own explicit ask (never bundled
+  into a broader approval) and the `TACTICAL PATCH` label in the summary and
+  commit. An approved band-aid that isn't labeled is indistinguishable from a
+  real fix six months later — that's the failure mode, not the approval
+  itself.
 - **Drive-by refactors.** "While I was in there I also..." No. Send a
   separate change or don't.
 - **Speculative generality.** Adding parameters, hooks, or extension points
