@@ -107,6 +107,10 @@ Heuristics:
   propagate to a layer that can.
 - Two callers behave differently → don't add a flag. Find the shared
   abstraction or the missing one.
+- A test is red and "was already red" → don't call it pre-existing or someone
+  else's until you know which commit turned it red (CI history, `git
+  bisect`). "Red before my last push" is not "not mine" — an earlier push of
+  yours counts.
 
 If the root cause is out of scope (in another team's code, requires a refactor
 you weren't asked for), don't fold this into whatever approval is already in
@@ -126,7 +130,9 @@ Before editing:
 
 - **What's the minimal diff that fixes the actual cause?**
 - **What's the blast radius?** Whose code imports this? What breaks if I
-  rename, retype, or remove?
+  rename, retype, or remove? A new required argument, a stricter default, or
+  a new refusal changes every caller that relied on the old behavior — find
+  them before you ship, not after their tests go red.
 - **Is there an existing pattern in this repo I should mirror?** Don't invent
   novel structures when there's a precedent two files over.
 - **Where do I verify this worked?** A test? A repro script? Driving the UI?
@@ -166,6 +172,11 @@ Apply these defaults:
 - **No comments unless they explain *why* a non-obvious choice was made.**
   Don't narrate what the code does. Don't reference the current task. Don't
   cite issue numbers. Code rots; comments rot faster.
+- **Tests pin the contract, through seams.** Inject the clock, process
+  identity, environment, and paths instead of overwriting globals — a stubbed
+  global behaves differently across runtime versions. Assert the behavior the
+  test is named for, not incidental wording some other module happens to
+  produce today.
 
 ### 6. Verify
 
@@ -187,6 +198,18 @@ needs your eyes on it."
 Type-checking and test suites verify code correctness, not feature
 correctness. Distinguish.
 
+Three ways "verified" quietly isn't:
+
+- **Your machine isn't the gate.** If CI runs a different OS, runtime
+  version, or filesystem than you do, a local green is not proof. After you
+  push, look at the CI run for your commit. A lane that has been red for days
+  hides every new failure behind the old ones — treat it as yours to fix.
+- **Your new test isn't the whole suite.** Run the tests of every caller you
+  touched, not just the ones you wrote.
+- **Delegated work is unverified until you've read it.** A sub-agent's green
+  tests prove its understanding of the task, not yours. Review its diff like
+  a PR, and rework what doesn't hold up.
+
 ### 7. Self-audit before you report
 
 Before writing the summary, check yourself against this list — don't skip it
@@ -201,6 +224,9 @@ because the change felt small:
   in both the summary and the commit message?
 - Did you verify at the level of the original ask (step 6), or are you about
   to claim "done" on compile/type-check alone?
+- Is every claim in your summary checked — including "pre-existing", "not
+  ours", "flaky", and anything you're filing as a follow-up? An unchecked
+  claim is a hypothesis; say so, or go check it.
 
 If any answer is no, fix it before you write the summary — not after.
 
