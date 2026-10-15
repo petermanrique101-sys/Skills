@@ -21,9 +21,9 @@
  *   --entry <dir>     top-level dir reached at runtime, not by import (repeatable)
  *
  * The output only changes on events worth reviewing — a module added or
- * removed, a new cross-module dependency, an importer count change, a module
- * going dead, a file crossing the size limit, a size-tier flip — so --check
- * can gate the build without failing on trivial edits.
+ * removed, a new cross-module dependency or cycle, an importer count change, a
+ * module going dead, a file crossing the size limit, a size-tier flip — so
+ * --check can gate the build without failing on trivial edits.
  */
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -200,6 +200,44 @@ for (const [f, ts] of edges) {
 for (const [u, rec] of units) if (rec.files === 0) units.delete(u);
 
 const rows = [...units].filter(([u]) => u !== "(root files)").sort((a, b) => b[1].importers.size - a[1].importers.size || a[0].localeCompare(b[0]));
+
+// Module cycles: groups of modules that each reach the others through imports
+// (strongly connected components of the module graph, Tarjan). Two modules in
+// one cycle can't be understood, tested or changed apart — the coupling an
+// agent breaks without seeing it. Listed so a new cycle is a reviewed event.
+function moduleCycles() {
+	const graph = new Map(rows.map(([u, r]) => [u, [...r.dependsOn].filter((d) => units.has(d))]));
+	let next = 0;
+	const index = new Map();
+	const low = new Map();
+	const stack = [];
+	const onStack = new Set();
+	const out = [];
+	const visit = (v) => {
+		index.set(v, next);
+		low.set(v, next++);
+		stack.push(v);
+		onStack.add(v);
+		for (const w of graph.get(v) ?? []) {
+			if (!index.has(w)) {
+				visit(w);
+				low.set(v, Math.min(low.get(v), low.get(w)));
+			} else if (onStack.has(w)) low.set(v, Math.min(low.get(v), index.get(w)));
+		}
+		if (low.get(v) !== index.get(v)) return;
+		const group = [];
+		let w;
+		do {
+			w = stack.pop();
+			onStack.delete(w);
+			group.push(w);
+		} while (w !== v);
+		if (group.length > 1) out.push(group.sort());
+	};
+	for (const v of [...graph.keys()].sort()) if (!index.has(v)) visit(v);
+	return out.sort((a, b) => b.length - a.length || a[0].localeCompare(b[0]));
+}
+const cycles = moduleCycles();
 const dead = rows.filter(([u, r]) => r.importers.size === 0 && !ENTRIES.has(u));
 const oversized = [...units.values()].flatMap((r) => r.oversized).sort();
 const loose = units.get("(root files)")?.files ?? 0;
@@ -231,6 +269,12 @@ const lines = [
 	"|---|---|",
 	...rows.map(([u, r]) => `| \`${u}/\` | ${[...r.dependsOn].sort().map((d) => `\`${d}\``).join(", ") || "—"} |`),
 	"",
+	"## Module cycles",
+	"",
+	"Modules that reach each other through imports. They can't be changed or tested apart; break a new cycle rather than extend it.",
+	"",
+	cycles.length ? cycles.map((g) => `- ${g.map((u) => `\`${u}/\``).join(" ⇄ ")}`).join("\n") : "None.",
+	"",
 	"## No live importer",
 	"",
 	dead.length ? dead.map(([u]) => `- \`${rootRel}/${u}/\` — dead, or reached at runtime (then pass \`--entry ${u}\`)`).join("\n") : "None.",
@@ -252,5 +296,5 @@ if (CHECK) {
 } else {
 	mkdirSync(dirname(OUT), { recursive: true });
 	writeFileSync(OUT, output);
-	console.log(`wrote ${relative(REPO, OUT)} (${rows.length} modules, ${dead.length} dead, ${oversized.length} oversized)`);
+	console.log(`wrote ${relative(REPO, OUT)} (${rows.length} modules, ${dead.length} dead, ${cycles.length} cycles, ${oversized.length} oversized)`);
 }

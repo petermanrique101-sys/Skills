@@ -1,10 +1,15 @@
-"""Module seals: code outside a sealed package may import it only through its
-public modules. An agent can then learn a package from its __init__ alone, and a
-reach into internals fails here instead of silently coupling two packages.
+"""Module boundaries, two kinds.
 
-Add a row to SEALS when a package gains a few outside importers (the generated
-codebase map shows importer counts). If a name is missing from the public
-surface, export it there — don't loosen the seal.
+SEALS: code outside a sealed package may import it only through its public
+modules. An agent can then learn a package from its __init__ alone, and a reach
+into internals fails here instead of silently coupling two packages. Add a row
+when a package gains a few outside importers (the codebase map shows importer
+counts). If a name is missing from the public surface, export it there; don't
+loosen the seal.
+
+FORBIDDEN: a package that must never depend on another at all, by any path (the
+UI never reaches the database). The layering rules ARCHITECTURE.md states in
+prose become failing tests.
 """
 import ast
 import pathlib
@@ -17,6 +22,11 @@ SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
 # (dotted package, allowed public submodules relative to it; "" = the package itself)
 SEALS: list[tuple[str, list[str]]] = [
     # ("app.billing", [""]),
+]
+
+# (dotted package that must not import, dotted package it must not import, the rule in words)
+FORBIDDEN: list[tuple[str, str, str]] = [
+    # ("app.ui", "app.db", "the UI reads data through app.api, never the database"),
 ]
 
 
@@ -62,3 +72,15 @@ def test_module_is_imported_only_through_public_entries(package, public):
         f"Deep imports into {package} - import from {sorted(allowed)} "
         f"(export the name there if it is missing):\n  " + "\n  ".join(violations)
     )
+
+
+@pytest.mark.parametrize("source,target,why", FORBIDDEN or [pytest.param(None, None, None, marks=pytest.mark.skip("no rules yet"))])
+def test_forbidden_dependency_is_never_crossed(source, target, why):
+    src_dir = SRC.joinpath(*source.split("."))
+    crossings = [
+        f"{path.relative_to(SRC)}:{lineno} -> {name}"
+        for path in src_dir.rglob("*.py")
+        for lineno, name in _imports(path)
+        if name == target or name.startswith(target + ".")
+    ]
+    assert not crossings, f"{source} must not import {target}: {why}\n  " + "\n  ".join(crossings)

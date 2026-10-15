@@ -34,6 +34,8 @@ the map wins.
 | Tests | `<npm test>` |
 | Regenerate the map after adding/moving modules | `<npm run docs:map>` |
 | Who depends on a module | `<npm run deps -- src/<module>>` |
+| Who uses a function, class, type or member | `<npm run refs -- <Name>>` (or `<Class.member>`, `<file>#<Name>`) |
+| Exported names declared in two places | `<npm run refs -- --duplicates>` |
 
 ## Layout
 
@@ -48,7 +50,7 @@ the map wins.
 - **No source file over <450> lines.** Split by responsibility before it gets there. Enforced by `<check:size>`.
 - **One responsibility per file and per module.** A new capability gets its own module, not a corner of an existing one.
 - **Import a module through its public entry.** If you need an internal, export it from the entry. Enforced by the module-seal test.
-- **Extend the existing owner.** Before writing a new subsystem, find the module that owns the concern (ARCHITECTURE.md) and extend it.
+- **Extend the existing owner.** Before writing a new subsystem, find the module that owns the concern (ARCHITECTURE.md) and extend it. Before writing a function, run `refs` / `--duplicates` for the name you'd give it.
 - **Read before you edit.** Open the file and its module guide first.
 
 ## Coupling rules
@@ -57,14 +59,16 @@ the map wins.
   write "remember to also update X" in a doc — write the test, then list it here.
 - Registries are declared once; every derived table comes from that declaration
   or is checked against it by a completeness test.
+- A string two modules share (an event name, a metadata key, a file format, a
+  rendered header someone parses) is declared once and both sides import it.
 
-Guard tests that encode coupling:
-- `<src/module-seals.test.ts>` — module boundaries
+Couplings in this repo (kind → its one declaration → its guard):
+- Imports → `docs/codebase-map.md` → map freshness, `<src/module-seals.test.ts>` (seals + forbidden dependencies)
 - `<...>`
 
 ## Growing the repo
 
-- New module → add it to ARCHITECTURE.md's subsystem table and regenerate the map.
+- New module → give it a row in ARCHITECTURE.md's subsystem table (what it owns, what it doesn't) and regenerate the map. `<check:owners>` fails the build until it has one.
 - A module reaches ~5 outside importers → add a seal row and a module guide (`src/<module>/AGENTS.md`).
 - A decision between real alternatives → `docs/adr/NNNN-<slug>.md`.
 - A plan or campaign finishes → move its doc to `docs/history/` with the banner.
@@ -102,9 +106,13 @@ owns the meaning. Rules live in [AGENTS.md](AGENTS.md).
 
 ## Subsystem map
 
+Every module under `src/` has a row here or its own `AGENTS.md`; the build
+checks it. Say what a module does NOT own when a neighbour is easy to confuse
+with it.
+
 | Capability | Owner (canonical code) | Notes |
 |---|---|---|
-| <Auth> | `src/auth/` (entry `index.ts`) | <the one thing an outsider must know> |
+| <Auth> | `src/auth/` (entry `index.ts`) | <the one thing an outsider must know; what it does not own, and who does> |
 
 ## Don't trace into
 

@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Set up a repo so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh, a 450-line file ceiling, module seal tests, single-declaration registries with completeness tests, a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
+description: Set up a repo so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), a 450-line file ceiling, a module-owner check so no module exists without a stated owner, symbol-level references from the TypeScript compiler, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
 user-invocable: true
 allowed-tools:
   - Read
@@ -31,9 +31,10 @@ exactly one home, and to make anything that can drift either *generated* or
 | Layer | Answers | Home | Kept true by |
 |---|---|---|---|
 | Rules | what's allowed | `AGENTS.md` (+ short module guides) | review; kept short |
-| Meaning | what owns what, how a request flows | `ARCHITECTURE.md` | doc-path check |
-| Facts | modules, importers, dependencies, oversized files | `docs/codebase-map.md` | generated; build fails when stale |
-| Couplings | "if X changes, Y must too" | tests | the test suite |
+| Meaning | what owns what, how a request flows | `ARCHITECTURE.md` | doc-path check (doc → code), owner check (code → doc) |
+| Facts | modules, importers, dependencies, cycles, oversized files | `docs/codebase-map.md` | generated; build fails when stale |
+| Symbols | who uses this function, class, type or member | `refs` (TypeScript language service) | nothing stored; computed on demand |
+| Couplings | "if X changes, Y must too", including the ones no import shows | tests, one per coupling kind (`references/couplings.md`) | the test suite |
 | Decisions | why it's this way | `docs/adr/` | append-only |
 | History | how it got here | `docs/history/` | not checked, clearly labeled |
 
@@ -71,10 +72,12 @@ The project must own its checks. CI and other machines can't reach
 
 | From this skill | Purpose |
 |---|---|
-| `scripts/codebase-map.mjs` | writes `docs/codebase-map.md`; `--check` for build; `--deps <path>` for "who uses this" |
+| `scripts/codebase-map.mjs` | writes `docs/codebase-map.md` (modules, importers, dependencies, cycles); `--check` for build; `--deps <path>` for "who imports this module" |
 | `scripts/check-file-size.mjs` | 450-line ceiling with a shrink-only allowlist |
 | `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist |
-| `assets/module-seals.test.ts` or `assets/test_module_seals.py` | module-boundary test, starts with an empty table |
+| `scripts/check-module-owners.mjs` | fails when a module under the source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
+| `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--duplicates` → exported names declared twice. Needs `typescript` as a dev dependency |
+| `assets/module-seals.test.ts` or `assets/test_module_seals.py` | seals (import only through the front door) and forbidden dependencies (never import X), both tables start empty |
 
 Put the seal test where the test runner finds it. The TS template assumes it
 sits in the source root, and the Python one assumes `tests/` next to `src/`.
@@ -88,15 +91,24 @@ The checks only work if they run without anyone remembering. For a Node project:
 "scripts": {
   "docs:map": "node scripts/codebase-map.mjs",
   "deps": "node scripts/codebase-map.mjs --deps",
+  "refs": "node scripts/code-refs.mjs",
   "check:map": "node scripts/codebase-map.mjs --check",
   "check:size": "node scripts/check-file-size.mjs",
   "check:doc-paths": "node scripts/check-doc-paths.mjs",
-  "check": "npm run check:size && npm run check:doc-paths && npm run check:map && npm test",
-  "build": "npm run check:size && npm run check:map && <compile>"
+  "check:owners": "node scripts/check-module-owners.mjs",
+  "check": "npm run check:size && npm run check:doc-paths && npm run check:owners && npm run check:map && npm test",
+  "build": "npm run check:size && npm run check:owners && npm run check:map && <compile>"
 }
 ```
 
-Pass `--root`, `--max-loc` or `--entry <dir>` when the defaults don't fit.
+`check:owners` is the discovery gate made mechanical: a new module can't land
+until someone has written down what it owns and what it doesn't, which is the
+moment a duplicate of an existing module gets noticed. `refs` is on demand,
+never in the build.
+
+Pass `--root`, `--max-loc` or `--entry <dir>` when the defaults don't fit. A
+Python `src/<package>/` layout keeps its modules one level down: pass
+`--root src/<package>` to the map and the owner check, or they see one module.
 `--entry` marks a module that is loaded at runtime rather than imported, so the
 map doesn't call it dead. For Python, put the same commands in a Makefile, a
 `pyproject` task runner, or pre-commit, whichever the project already uses. If
@@ -119,13 +131,19 @@ Use `references/templates.md`. Create:
 Fill in real commands and paths. A template placeholder left in a guidance doc
 is a stale claim on day one.
 
-### 5. Registries
+### 5. Classify the couplings
 
-If the project has, or is about to have, anything registered in more than one
-place (tools, routes, permissions, event types, providers, feature flags), set
-it up as a single declaration from the start. See
-`references/registry-pattern.md`. This prevents the most whack-a-mole of
-anything in this setup.
+The import graph shows one kind of coupling. The silent breakage comes from
+the rest: an event name, a metadata key, a file format, a string one module
+renders and another parses. Use `references/couplings.md` to find which kinds
+this project has (or is about to have), and install the check for those kinds
+only. A project with no event bus gets no event checker.
+
+Registries come first if present: anything listed in more than one place
+(tools, routes, permissions, providers, feature flags) becomes a single
+declaration from the start (`references/registry-pattern.md`). That prevents the
+most whack-a-mole of anything here. Record each kind's home and guard in
+AGENTS.md's coupling section.
 
 ### 6. Prove the gates work
 
@@ -135,7 +153,11 @@ green, then prove each gate catches a real violation:
 - Add a 460-line throwaway source file → `check:size` fails.
 - Put a backticked `src/does-not-exist.ts` in ARCHITECTURE.md → `check:doc-paths` fails.
 - Add a module without regenerating the map → `check:map` fails.
+- Add a module with no ARCHITECTURE.md row or AGENTS.md → `check:owners` fails.
 - With one seal row, deep-import an internal → the seal test fails.
+- With one forbidden-dependency row, import across it → that test fails.
+- TS/JS: import a function under another name (`import { a as b }`), call `b()`,
+  and run `refs a` → the call is listed (a text search for `a` would miss it).
 
 Revert every probe, re-run `check` green, and report each probe's outcome
 honestly. If one didn't fail, the wiring is wrong. Fix it before finishing.
@@ -160,7 +182,7 @@ their own limit.
 ## Siblings
 
 - `/canonical-check`: before building a subsystem, find the existing owner.
-- `/blast-radius`: before changing a shared anchor. `npm run deps -- <path>` gives its consumer list.
+- `/blast-radius`: before changing a shared anchor. `npm run deps -- <path>` gives the modules that import it; `npm run refs -- <Name>` gives every use of the symbol itself.
 - `/docs-sync`: bring an existing repo's docs back in line with the code.
 - `/brownfield`, `/grand-daddy-brown`: carry out retrofit gaps the user picked.
 - `/app-build`, `/grand-daddy-green`: build a new app; run this skill first so the structure exists from commit one.

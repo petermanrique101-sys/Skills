@@ -23,7 +23,13 @@ node <skill>/scripts/codebase-map.mjs --root <src> --max-loc <limit> --out <scra
 node <skill>/scripts/check-file-size.mjs --root <src> --max-loc <limit>
 node <skill>/scripts/check-doc-paths.mjs                 # all live docs
 node <skill>/scripts/check-doc-paths.mjs AGENTS.md ARCHITECTURE.md <nested guides>   # guidance only
+node <skill>/scripts/check-module-owners.mjs --root <src>   # modules nobody wrote down
+node <skill>/scripts/code-refs.mjs --duplicates            # TS/JS: exported names declared twice
 ```
+
+The map's "Module cycles" section and `--duplicates` are where parallel
+implementations show up: two modules that each claim the same job usually
+share a name, or reach each other.
 
 If the repo already has its own map generator, compare totals with it. A
 mismatch is a finding about one of the two generators.
@@ -42,14 +48,22 @@ For each item, collect evidence with `file:line`:
    churn in the code it describes.
 3. **Prose coupling.** Run the grep in `registry-pattern.md`. Each "also update X"
    is an unenforced coupling and becomes a test.
-4. **Unsealed hubs.** Modules with many outside importers (from the map) and no
+4. **Unowned modules and second owners.** Every module check-module-owners lists,
+   and every pair of modules claiming the same job (`--duplicates` hits, two
+   headers that both say "the single owner of X"). The second kind is the one
+   agents created; it gets a consolidation, not a doc row.
+5. **Runtime couplings.** Inventory the kinds in `couplings.md` the import graph
+   can't see: event names, shared metadata keys, persisted formats, text parsed
+   back out of text, cross-process protocols. Record producers, consumers and
+   the current guard for each; unguarded silent ones rank first.
+6. **Unsealed hubs.** Modules with many outside importers (from the map) and no
    seal test. These are where deep imports spread.
-5. **Flat namespace.** Loose files at the source root that cluster by prefix
+7. **Flat namespace.** Loose files at the source root that cluster by prefix
    (`approval-*.ts`, `config-*.ts`). A folder is an ownership signal.
    `ls <src> | sed -E 's/[-_.].*//' | sort | uniq -c | sort -rn | head`
-6. **History mixed with live docs.** Campaign logs, PRDs and design docs for
+8. **History mixed with live docs.** Campaign logs, PRDs and design docs for
    shipped work that sit in `docs/`, usually the bulk of the stale-path hits.
-7. **Decisions outside the repo.** Rulings that live only in the user's notes,
+9. **Decisions outside the repo.** Rulings that live only in the user's notes,
    chat history or agent memory. List them as ADR candidates. Ask before
    copying anything from private notes into the repo.
 
