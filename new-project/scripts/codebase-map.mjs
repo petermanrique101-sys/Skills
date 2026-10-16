@@ -14,6 +14,8 @@
  *   node codebase-map.mjs                      write the map
  *   node codebase-map.mjs --check              exit 1 if the map is stale (wire into build)
  *   node codebase-map.mjs --deps <path>        who imports <path>, and what it imports
+ *   node codebase-map.mjs --deps <path> --depth N
+ *                                              who a change reaches, hop by hop, and the tests to run
  * Options:
  *   --root <dir>      source root (default: src)
  *   --out <file>      output markdown (default: docs/codebase-map.md)
@@ -149,20 +151,35 @@ if (!existsSync(ROOT)) {
 const files = walk(ROOT);
 const prod = files.filter((f) => !isTest(f));
 const inTree = new Set(files);
-const edges = new Map(); // file -> Set(target files inside the mapped tree)
-for (const f of prod) edges.set(f, new Set(importsOf(f).filter((t) => t !== f && inTree.has(t))));
+const allEdges = new Map(); // file -> Set(target files inside the mapped tree), tests included
+for (const f of files) allEdges.set(f, new Set(importsOf(f).filter((t) => t !== f && inTree.has(t))));
+const edges = new Map(prod.map((f) => [f, allEdges.get(f)])); // the wiring: non-test files only
 
 if (DEPS) {
+	// --depth N: hop 1 imports the target, hop 2 imports a hop-1 file, ...; then
+	// every test that imports the target or a reached file: the tests to run.
+	const DEPTH = Number(opt("--depth", "1"));
 	const target = resolve(REPO, DEPS);
 	const inside = (p) => p === target || p.startsWith(target + sep);
-	const importers = new Map();
-	const deps = new Map();
-	for (const [f, ts] of edges) {
-		for (const t of ts) {
-			if (inside(t) && !inside(f)) (importers.get(unitOf(f)) ?? importers.set(unitOf(f), new Set()).get(unitOf(f))).add(posix(f));
-			if (inside(f) && !inside(t)) (deps.get(unitOf(t)) ?? deps.set(unitOf(t), new Set()).get(unitOf(t))).add(posix(t));
-		}
+	const importersOf = new Map();
+	for (const [f, ts] of allEdges) for (const t of ts) (importersOf.get(t) ?? importersOf.set(t, new Set()).get(t)).add(f);
+	const seen = new Set(files.filter(inside));
+	const reached = [...seen];
+	let frontier = [...seen];
+	const hops = [];
+	for (let hop = 1; hop <= DEPTH && frontier.length; hop++) {
+		const next = [];
+		for (const f of frontier) for (const i of importersOf.get(f) ?? []) if (!seen.has(i) && !isTest(i)) { seen.add(i); next.push(i); }
+		hops.push(next);
+		reached.push(...next);
+		frontier = next;
 	}
+	const tests = [...new Set(reached.flatMap((f) => [...(importersOf.get(f) ?? [])].filter(isTest)))].map(posix).sort();
+	const grouped = (list) => {
+		const m = new Map();
+		for (const f of list) (m.get(unitOf(f)) ?? m.set(unitOf(f), new Set()).get(unitOf(f))).add(posix(f));
+		return m;
+	};
 	const print = (title, m) => {
 		const total = [...m.values()].reduce((n, s) => n + s.size, 0);
 		console.log(`\n## ${title} (${total} files across ${m.size} modules)`);
@@ -172,8 +189,10 @@ if (DEPS) {
 		}
 	};
 	console.log(`# Dependencies of ${relative(REPO, target)} (non-test, static + dynamic imports)`);
-	print("Imported by", importers);
-	print("Imports from", deps);
+	hops.forEach((list, i) => print(i === 0 ? "Imported by" : `Reached at hop ${i + 1} (imports a hop-${i} file)`, grouped(list)));
+	if (DEPTH === 1) print("Imports from", grouped([...new Set(files.filter((f) => inside(f) && !isTest(f)).flatMap((f) => [...allEdges.get(f)]).filter((t) => !inside(t)))]));
+	console.log(`\n## Tests to run: every test that imports it or a file listed above (${tests.length})`);
+	for (const t of tests) console.log(`  ${t}`);
 	process.exit(0);
 }
 

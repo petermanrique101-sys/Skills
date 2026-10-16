@@ -61,9 +61,12 @@ For each item, collect evidence with `file:line`:
 7. **Flat namespace.** Loose files at the source root that cluster by prefix
    (`approval-*.ts`, `config-*.ts`). A folder is an ownership signal.
    `ls <src> | sed -E 's/[-_.].*//' | sort | uniq -c | sort -rn | head`
-8. **History mixed with live docs.** Campaign logs, PRDs and design docs for
+8. **No reach tooling.** Nothing answers "what does this change reach, and
+   which tests cover it" past one hop, and agents grep for symbols by habit.
+   The fix is `--depth` on deps/refs and, for TS/JS, the refs hint hook.
+9. **History mixed with live docs.** Campaign logs, PRDs and design docs for
    shipped work that sit in `docs/`, usually the bulk of the stale-path hits.
-9. **Decisions outside the repo.** Rulings that live only in the user's notes,
+10. **Decisions outside the repo.** Rulings that live only in the user's notes,
    chat history or agent memory. List them as ADR candidates. Ask before
    copying anything from private notes into the repo.
 

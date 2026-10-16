@@ -18,6 +18,8 @@
  * Options:
  *   --project <tsconfig>   default: tsconfig.json
  *   --tests                list each use in test files (default: test files are counted, not listed)
+ *   --depth N              how far a change reaches: the top-level declarations that use it, those
+ *                          that use them, ... N hops out; uses at module scope; the tests to run
  *
  * Needs the project's own `typescript` package. Python is not covered: use the
  * codebase map's --deps for module-level questions and a search for symbols.
@@ -33,12 +35,13 @@ const opt = (name, dflt) => {
 };
 const REPO = process.cwd();
 const PROJECT = resolve(REPO, opt("--project", "tsconfig.json"));
-const QUERY = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--project");
+const QUERY = args.find((a, i) => !a.startsWith("--") && args[i - 1] !== "--project" && args[i - 1] !== "--depth");
 const DUPLICATES = args.includes("--duplicates");
 const LIST_TESTS = args.includes("--tests");
+const DEPTH = Number(opt("--depth", "0"));
 
 if (!QUERY && !DUPLICATES) {
-	console.error("usage: code-refs.mjs <Name> | <Name.member> | <file>#<Name> | --duplicates  [--project tsconfig.json] [--tests]");
+	console.error("usage: code-refs.mjs <Name> | <Name.member> | <file>#<Name> | --duplicates  [--project tsconfig.json] [--tests] [--depth N]");
 	process.exit(2);
 }
 
@@ -160,7 +163,52 @@ if (targets.length === 0) {
 	process.exit(1);
 }
 
+const IMPORT_LINE = (text) => /^(import\b|export\s*(\*|\{|type\s*\{))/.test(text) || /^\}\s*from\s/.test(text);
+
+/** The top-level declaration (its name node) whose text holds `pos`, or null at module scope. */
+function enclosingDecl(sf, pos) {
+	const st = sf.statements.find((s) => pos >= s.getFullStart() && pos < s.getEnd());
+	if (!st) return null;
+	// A variable statement's declarations sit two levels down (statement → list → declaration).
+	const decls = topLevelDecls(sf).filter((x) => x.node === st || x.node.parent?.parent === st);
+	return decls.find((x) => pos >= x.node.getFullStart() && pos < x.node.getEnd()) ?? decls[0] ?? null;
+}
+
+/** --depth N: the declarations that use a target, then those that use them, N hops out. */
+function printReach(t) {
+	const key = (sf, node) => `${sf.fileName}:${node.getStart(sf)}`;
+	const seen = new Set([key(t.sf, t.nameNode)]);
+	const tests = new Set();
+	const moduleScope = [];
+	let frontier = [t];
+	console.log(`\n## Reach of ${t.label} — ${rel(t.sf.fileName)}:${lineOf(t.sf, t.nameNode.getStart(t.sf)).line} (depth ${DEPTH})`);
+	for (let hop = 1; hop <= DEPTH && frontier.length; hop++) {
+		const next = [];
+		for (const f of frontier) {
+			for (const g of service.findReferences(f.sf.fileName, f.nameNode.getStart(f.sf)) ?? []) {
+				for (const r of g.references) {
+					const sf = program.getSourceFile(r.fileName);
+					if (r.isDefinition || !sf || /[\\/]node_modules[\\/]/.test(r.fileName)) continue;
+					if (IMPORT_LINE(lineOf(sf, r.textSpan.start).text)) continue;
+					if (isTest(r.fileName)) { tests.add(rel(r.fileName)); continue; }
+					const d = enclosingDecl(sf, r.textSpan.start);
+					if (!d) { moduleScope.push(`${rel(r.fileName)}:${lineOf(sf, r.textSpan.start).line}`); continue; }
+					if (seen.has(key(sf, d.nameNode))) continue;
+					seen.add(key(sf, d.nameNode));
+					next.push({ sf, ...d });
+				}
+			}
+		}
+		console.log(`\nhop ${hop}: ${next.length} declarations`);
+		for (const d of next) console.log(`  ${rel(d.sf.fileName)}  ${d.name}:${lineOf(d.sf, d.nameNode.getStart(d.sf)).line}`);
+		frontier = next;
+	}
+	if (moduleScope.length) console.log(`\nused at module scope (file reached, nothing to follow):\n${[...new Set(moduleScope)].map((m) => `  ${m}`).join("\n")}`);
+	console.log(`\ntests to run (${tests.size}):\n${[...tests].sort().map((x) => `  ${x}`).join("\n")}`);
+}
+
 for (const t of targets) {
+	if (DEPTH > 0) { printReach(t); continue; }
 	const decl = lineOf(t.sf, t.nameNode.getStart(t.sf));
 	const groups = service.findReferences(t.sf.fileName, t.nameNode.getStart(t.sf)) ?? [];
 	const seen = new Set();

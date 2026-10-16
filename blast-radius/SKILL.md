@@ -64,6 +64,12 @@ If you can't name the symbol and the intended concern, ask one question and stop
 
 Don't trust intuition about who reads it — **verify**:
 
+- If the repo has reach tooling, run it first; it is the compiler's list, not a
+  search: `npm run refs -- <Symbol> --depth 2` (the declarations the change
+  reaches, hop by hop, and the tests that use them) and, for a file or module,
+  `npm run deps -- <path> --depth 2` (the files that reach it and every test
+  importing one). Those test lists are step 4's tests to run. The searches below
+  still cover what no import shows: string keys, enum literals, config fields.
 - `Grep` the symbol name across `src/` (and `public/`, `desktop/`, `packages/` if present). Include re-exports and barrels — follow them to real readers.
 - For a config field, grep the **string key** too (`"fileAccessMode"`, `cfg.inlineEvalPolicy`) — readers often parse it by string, not by importing a constant.
 - For an enum, grep each **value** (`"unrestricted"`, `"refuse"`) — a consumer may branch on the literal, not the type.

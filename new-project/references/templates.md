@@ -36,6 +36,7 @@ the map wins.
 | Who depends on a module | `<npm run deps -- src/<module>>` |
 | Who uses a function, class, type or member | `<npm run refs -- <Name>>` (or `<Class.member>`, `<file>#<Name>`) |
 | Exported names declared in two places | `<npm run refs -- --duplicates>` |
+| How far a change reaches, hop by hop, and the tests to run | `<npm run refs -- <Name> --depth 2>` (declarations), `<npm run deps -- <path> --depth 2>` (files) |
 
 ## Layout
 
