@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * The structure checks as one command: file-size ceiling, module owners, doc
- * paths, then the codebase map. Every check runs even after one fails, so a
- * single run shows everything to fix. For a build or a harness gate that has
+ * The structure checks as one command: the codebase map, the file-size
+ * ceiling, module owners, doc paths. Every check runs even after one fails, so
+ * a single run shows everything to fix. For a build or a harness gate that has
  * one slot for "is the structure right"; the individual scripts stay for
  * targeted runs.
  *
@@ -11,7 +11,9 @@
  *
  * Without --check the map is REGENERATED (the build keeps it current, and the
  * commit carries it); with --check a stale map fails instead, which is what CI
- * wants. --root and --max-loc are forwarded to every check that takes them.
+ * wants. The map runs first so the doc-path check reads the map of this tree,
+ * not the last one. --root and --max-loc are forwarded to every check that
+ * takes them.
  */
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -27,10 +29,10 @@ const check = args.includes("--check");
 const here = fileURLToPath(new URL(".", import.meta.url));
 
 const steps = [
+	["codebase-map.mjs", [...root, ...maxLoc, ...(check ? ["--check"] : [])]],
 	["check-file-size.mjs", [...root, ...maxLoc]],
 	["check-module-owners.mjs", [...root]],
 	["check-doc-paths.mjs", []],
-	["codebase-map.mjs", [...root, ...maxLoc, ...(check ? ["--check"] : [])]],
 ];
 
 let failed = 0;
