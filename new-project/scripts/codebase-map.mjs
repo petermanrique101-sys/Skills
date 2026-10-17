@@ -143,12 +143,8 @@ const locOf = (file) => {
 };
 const tier = (loc) => (loc < 250 ? "S" : loc < 1000 ? "M" : loc < 3000 ? "L" : "XL");
 
-if (!existsSync(ROOT)) {
-	console.error(`source root not found: ${ROOT} (pass --root)`);
-	process.exit(2);
-}
-
-const files = walk(ROOT);
+// A project before its first source file has an empty tree, not a broken one.
+const files = existsSync(ROOT) ? walk(ROOT) : [];
 const prod = files.filter((f) => !isTest(f));
 const inTree = new Set(files);
 const allEdges = new Map(); // file -> Set(target files inside the mapped tree), tests included

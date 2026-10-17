@@ -43,14 +43,11 @@ function holdsSource(dir) {
 	return false;
 }
 
-if (!existsSync(ROOT)) {
-	console.error(`source root not found: ${ROOT} (pass --root)`);
-	process.exit(2);
-}
 const arch = existsSync(ARCH) ? readFileSync(ARCH, "utf8") : "";
 const rootRel = relative(REPO, ROOT).split(sep).join("/");
 
-const modules = readdirSync(ROOT)
+// A project before its first source file has no modules to own yet.
+const modules = (existsSync(ROOT) ? readdirSync(ROOT) : [])
 	.filter((d) => !SKIP_DIRS.has(d) && !d.startsWith(".") && !d.startsWith("__"))
 	.filter((d) => statSync(join(ROOT, d)).isDirectory() && holdsSource(join(ROOT, d)))
 	.sort();
