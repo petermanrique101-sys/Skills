@@ -16,7 +16,9 @@
  *
  * Default source roots, from the project file at the repo root:
  *   Cargo.toml → src · go.mod → internal/, cmd/, pkg/ (those present) ·
- *   package.json / pyproject.toml / nothing → src.
+ *   package.json → src, or the framework's layout when there is no src/
+ *   (SvelteKit's src/lib, an app/ dir for Next app-router and Remix) ·
+ *   pyproject.toml / nothing → src.
  *
  * Import resolution (only imports inside the mapped tree count):
  *   JS/TS   relative specifiers; .js→.ts remapping; index files
@@ -161,7 +163,13 @@ export const LANGUAGES = [
 		isSource: (name) => !name.endsWith(".d.ts"),
 		isTest: (base) => /\.(test|spec)\.[^.]+$/.test(base),
 		projectFiles: ["package.json"],
-		roots: () => ["src"],
+		// The framework's own layout when it is not src/: SvelteKit keeps modules in
+		// src/lib (routes are files, not modules); Next's app-dir and Remix use app/.
+		roots: (repo) => {
+			if (existsSync(join(repo, "src", "lib")) && readdirSync(repo).some((n) => /^svelte\.config\.(js|mjs|ts)$/.test(n))) return ["src/lib"];
+			if (!existsSync(join(repo, "src")) && existsSync(join(repo, "app"))) return ["app"];
+			return ["src"];
+		},
 		moduleOf: topLevelDirModule,
 		imports: (file, text) => [...text.replace(/\\\//g, "/").matchAll(JS_SPEC)].flatMap((m) => resolveJs(file, m[1])),
 	},

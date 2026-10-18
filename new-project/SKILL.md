@@ -146,7 +146,9 @@ it off for one shell.
 
 Without `--root` the scripts take the source roots from the project file at
 the repo root: `Cargo.toml` → `src`; `go.mod` → `internal/`, `cmd/`, `pkg/`
-(those present); `package.json`, `pyproject.toml` or nothing → `src`.
+(those present); `package.json` → `src`, or the framework's own layout when
+there is no `src/` (SvelteKit's `src/lib`, the `app/` dir of a Next
+app-router or Remix project); `pyproject.toml` or nothing → `src`.
 Pass `--root` (repeatable), `--max-loc` or `--entry <module>` when that
 doesn't fit: a Python `src/<package>/` layout keeps its modules one level
 down (`--root src/<package>`, or the scripts see one module), and a flat Go

@@ -14,7 +14,8 @@
  * wants. The map runs first so the doc-path check reads the map of this tree,
  * not the last one. Without --root the source roots come from the project kind
  * (project-languages.mjs: Cargo.toml → src; go.mod → internal/, cmd/, pkg/;
- * otherwise src), and every check is handed the same roots.
+ * package.json → src or the framework's layout; otherwise src), and every
+ * check is handed the same roots.
  */
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
