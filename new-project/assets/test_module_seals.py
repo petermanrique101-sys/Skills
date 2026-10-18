@@ -16,8 +16,11 @@ import pathlib
 
 import pytest
 
-# Source root = the importable top-level package's parent. Adjust to the project layout.
-SRC = pathlib.Path(__file__).resolve().parents[1] / "src"
+# The source root (the importable top-level package's parent), as a path from
+# this file's directory: "../src" for the usual tests/ beside src/; "." when the
+# test sits in the root itself.
+SOURCE_ROOT = "../src"
+SRC = (pathlib.Path(__file__).resolve().parent / SOURCE_ROOT).resolve()
 
 # (dotted package, allowed public submodules relative to it; "" = the package itself)
 SEALS: list[tuple[str, list[str]]] = [

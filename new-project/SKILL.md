@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Set up a repo so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), a 450-line file ceiling, a module-owner check so no module exists without a stated owner, symbol-level references from the TypeScript compiler with multi-hop "what does this change reach" (and the tests to run), an optional hook that steers grep toward those references, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
+description: Set up a repo (JS/TS, Python, Rust or Go) so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), a 450-line file ceiling, a module-owner check so no module exists without a stated owner, symbol-level references from the TypeScript compiler with multi-hop "what does this change reach" (and the tests to run), an optional hook that steers grep toward those references, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
 user-invocable: true
 allowed-tools:
   - Read
@@ -61,9 +61,20 @@ root (default `src/`), the test runner, and the build/check command. Language
 and framework are product choices, so ask rather than pick. Everything below is
 an engineering default; decide it and move on.
 
-The bundled scripts are Node (≥18) and understand JS/TS and Python imports.
-For a Python project, Node is a dev-only dependency. If the user won't have
-Node at all, port the scripts; each script's header states its contract.
+The bundled scripts are Node (≥18) and understand JS/TS, Python, Rust and Go.
+`scripts/project-languages.mjs` is the table they share, one row per language:
+source extensions, the test-file rule, the import syntax, how an import
+resolves to a file, the default source roots, and what a module is (a
+top-level folder under the root for JS/TS and Python; a top-level folder or
+`.rs` file under `src/` for Rust; a package directory for Go). Supporting
+another language is adding a row. For a project that isn't Node, Node is a
+dev-only dependency. If the user won't have Node at all, port the scripts;
+each script's header states its contract.
+
+Symbol-level references (`refs`) are TS/JS only, from the TypeScript
+compiler. Rust and Go have their own: `cargo doc`/`rust-analyzer` and
+`gopls` (`gopls references`) answer "who uses this function" there; point the
+project's AGENTS.md at them instead of at `refs`.
 
 ### 2. Copy the tooling into the project
 
@@ -72,17 +83,23 @@ The project must own its checks. CI and other machines can't reach
 
 | From this skill | Purpose |
 |---|---|
+| `scripts/project-languages.mjs` | the language table (JS/TS, Python, Rust, Go) the map, the owner check and `check-structure` import; always copied with them |
 | `scripts/codebase-map.mjs` | writes `docs/codebase-map.md` (modules, importers, dependencies, cycles); `--check` for build; `--deps <path>` for "who imports this module"; `--deps <path> --depth N` for who a change reaches hop by hop, plus the tests to run |
-| `scripts/check-file-size.mjs` | 450-line ceiling with a shrink-only allowlist |
+| `scripts/check-file-size.mjs` | 450-line ceiling with a shrink-only allowlist; its failure text says how to get out (split, or list a generated file in `.file-size-allow`) |
 | `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist |
-| `scripts/check-module-owners.mjs` | fails when a module under the source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
+| `scripts/check-module-owners.mjs` | fails when a module under a source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
+| `scripts/check-structure.mjs` | all of the above as one command; picks the source roots from the project kind when `--root` is not given |
 | `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--depth N` → the declarations that use it, those that use them, N hops out, and the tests to run; `--duplicates` → exported names declared twice. Needs `typescript` as a dev dependency |
 | `scripts/refs-hint-hook.mjs` | TS/JS only, optional: a Claude Code hook that suggests `npm run refs -- <Name>` when an agent greps for a code symbol (step 3) |
-| `assets/module-seals.test.ts` or `assets/test_module_seals.py` | seals (import only through the front door) and forbidden dependencies (never import X), both tables start empty |
+| `assets/module-seals.test.ts` (vitest) or `assets/test_module_seals.py` (pytest) | seals (import only through the front door) and forbidden dependencies (never import X), both tables start empty |
 
-Put the seal test where the test runner finds it. The TS template assumes it
-sits in the source root, and the Python one assumes `tests/` next to `src/`.
-Adjust the one path constant if not.
+Put the seal test where the test runner finds it. Each template has one
+`SOURCE_ROOT` constant at the top, a path from the test file to the source
+root: the TS one assumes it sits in the root (`.`; a Next app-dir project's
+`app/`, Astro's `src/`), a SvelteKit test in `src/` points at `lib`, and the
+Python one assumes `tests/` next to `src/` (`../src`). Rust and Go get no seal
+test: the compiler enforces the boundary (`pub` visibility; Go's `internal/`
+rule), so say that in AGENTS.md instead of shipping a test nothing needs.
 
 ### 3. Wire the checks into the build
 
@@ -127,9 +144,13 @@ own settings (a user-level entry stays silent in other repos):
 At user level, give the command the hook's absolute path. `REFS_HINT=0` turns
 it off for one shell.
 
-Pass `--root`, `--max-loc` or `--entry <dir>` when the defaults don't fit. A
-Python `src/<package>/` layout keeps its modules one level down: pass
-`--root src/<package>` to the map and the owner check, or they see one module.
+Without `--root` the scripts take the source roots from the project file at
+the repo root: `Cargo.toml` → `src`; `go.mod` → `internal/`, `cmd/`, `pkg/`
+(those present); `package.json`, `pyproject.toml` or nothing → `src`.
+Pass `--root` (repeatable), `--max-loc` or `--entry <module>` when that
+doesn't fit: a Python `src/<package>/` layout keeps its modules one level
+down (`--root src/<package>`, or the scripts see one module), and a flat Go
+layout names its package folders explicitly.
 `--entry` marks a module that is loaded at runtime rather than imported, so the
 map doesn't call it dead. For Python, put the same commands in a Makefile, a
 `pyproject` task runner, or pre-commit, whichever the project already uses. If
@@ -184,6 +205,16 @@ green, then prove each gate catches a real violation:
   `b`'s test.
 - With the hook on: grep for a camelCase name → the reply carries the `refs`
   hint once, and a second grep for it doesn't.
+- Rust (a scratch crate: `src/main.rs` with `mod auth; mod store;`,
+  `src/auth.rs` using `crate::store::Db`, `src/store/mod.rs` + `db.rs`): the
+  map lists `src/auth.rs` and `src/store/` with auth depending on store; with no
+  row for `src/store/`, `check:owners` fails; a 460-line `src/big.rs` fails
+  `check:size`.
+- Go (a scratch module: `go.mod`, `cmd/app/main.go` importing
+  `<module>/internal/auth`, which imports `<module>/internal/store`): the map
+  lists `cmd/app/`, `internal/auth/`, `internal/store/` and both edges, with
+  `cmd/app/` as the entrypoint; with no row for `internal/store/`,
+  `check:owners` fails; a 460-line `internal/auth/big.go` fails `check:size`.
 
 Revert every probe, re-run `check` green, and report each probe's outcome
 honestly. If one didn't fail, the wiring is wrong. Fix it before finishing.
