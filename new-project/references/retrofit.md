@@ -9,8 +9,12 @@ template's missing pieces into them.
 
 - Read every guidance file: root and nested `AGENTS.md`, `CLAUDE.md`, `README.md`,
   `ARCHITECTURE.md`, `CONTRIBUTING.md`, `docs/adr/`.
-- Find the existing size ceiling (hygiene scripts, lint config, AGENTS.md). **Use
-  it, not the 450 default.** A repo that enforces 400 stays at 400.
+- Find the existing size ceiling (hygiene scripts, lint config, AGENTS.md). The
+  kit counts CODE lines (comments and blank lines are free), so a repo's
+  physical-line ceiling does not carry over one to one: measure first
+  (`check-code-size.mjs` prints the warning band) and pick caps the user agrees
+  to, usually lower than the old physical-line number. Never raise a cap to
+  make the check pass.
 - Find the build/test/check commands and any existing generated docs or guard
   tests. Extend those rather than adding parallel ones.
 
@@ -19,8 +23,8 @@ template's missing pieces into them.
 Run them from the repo root, writing output to a scratch location. Don't touch the repo yet.
 
 ```bash
-node <skill>/scripts/codebase-map.mjs --root <src> --max-loc <limit> --out <scratch>/map.md [--entry <dir> ...]
-node <skill>/scripts/check-file-size.mjs --root <src> --max-loc <limit>
+node <skill>/scripts/codebase-map.mjs --root <src> --max-code <cap> --warn-code <warn> --out <scratch>/map.md [--entry <dir> ...]
+node <skill>/scripts/check-code-size.mjs --root <src> --max-code <cap> --warn-code <warn> --max-fn <fn cap> --warn-fn <fn warn>
 node <skill>/scripts/check-doc-paths.mjs                 # all live docs
 node <skill>/scripts/check-doc-paths.mjs AGENTS.md ARCHITECTURE.md <nested guides>   # guidance only
 node <skill>/scripts/check-module-owners.mjs --root <src>   # modules nobody wrote down
@@ -98,5 +102,8 @@ moves come last: they touch many imports for a smaller gain.
 
 Hand multi-chunk work to `/brownfield` (or `/grand-daddy-brown` for a long
 campaign), one gap per chunk, with the repo's full build after each. Adopting
-the size check on a repo with existing violators means seeding the shrink-only
-allowlist once (`--write-allowlist`). Never raise the limit to make it pass.
+the size check on a repo with existing violators means seeding the ratchet once
+(`--write-ratchet`: every file and function over a cap, at its size, sorted, so
+the same tree always writes the same file). After that an entry may only
+shrink (`--tighten` locks a shrink in and drops what is back under the cap).
+Never raise a cap or re-seed the ratchet to make the check pass.

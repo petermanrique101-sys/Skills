@@ -48,7 +48,10 @@ the map wins.
 
 ## Code rules
 
-- **No source file over <450> lines.** Split by responsibility before it gets there. Enforced by `<check:size>`.
+- **Size caps, in code lines: <400> per file, <100> per function.** A line counts when it holds code; comment and blank lines are free. A function's count is its own: a function nested in it counts for itself. Warnings start at <320> / <60> and are listed in `docs/codebase-map.md` under "Nearing the size cap"; they never fail. Enforced by `<check:size>`.
+  - Why: an agent finds its way by reading a whole file or function; past the cap it is almost always doing a second job.
+  - Near or over a cap: find the job that grew and move it into a module (or function) named after that job. Never delete comments to fit (they don't count), and never name a split, a file or a commit after the limit ("part 2", "under the 400-line cap").
+  - `.code-size-ratchet` lists what was over a cap when the caps were adopted (a retrofit; a new project has none), at its recorded size. It may only shrink.
 - **One responsibility per file and per module.** A new capability gets its own module, not a corner of an existing one.
 - **Import a module through its public entry.** If you need an internal, export it from the entry. Enforced by the module-seal test.
 - **Extend the existing owner.** Before writing a new subsystem, find the module that owns the concern (ARCHITECTURE.md) and extend it. Before writing a function, run `refs` / `--duplicates` for the name you'd give it.

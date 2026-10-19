@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Set up a repo (JS/TS, Python, Rust or Go) so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), a 450-line file ceiling, a module-owner check so no module exists without a stated owner, symbol-level references from the TypeScript compiler with multi-hop "what does this change reach" (and the tests to run), an optional hook that steers grep toward those references, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
+description: Set up a repo (JS/TS, Python, Rust or Go) so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), code-line size caps per file and per function (comments are free) with a shrink-only ratchet, a module-owner check so no module exists without a stated owner, symbol-level references from the TypeScript compiler with multi-hop "what does this change reach" (and the tests to run), an optional hook that steers grep toward those references, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
 user-invocable: true
 allowed-tools:
   - Read
@@ -47,7 +47,8 @@ that sentence should be a failing test instead.**
   → follow *New project setup* below.
 - **Existing codebase** → read `references/retrofit.md` and follow it. Audit,
   report ranked gaps, and change nothing until the user picks. Keep the repo's
-  existing limits and conventions (a repo that enforces 400 lines stays at 400).
+  existing conventions; a physical-line size limit becomes code-line caps the
+  user agrees to after measuring (`references/retrofit.md`).
 
 If it's unclear which applies, the presence of real application code with
 importers between modules means retrofit.
@@ -85,10 +86,11 @@ The project must own its checks. CI and other machines can't reach
 |---|---|
 | `scripts/project-languages.mjs` | the language table (JS/TS, Python, Rust, Go) the map, the owner check, the doc-path check and `check-structure` import; always copied with them |
 | `scripts/codebase-map.mjs` | writes `docs/codebase-map.md` (modules, importers, dependencies, cycles); `--check` for build; `--deps <path>` for "who imports this module"; `--deps <path> --depth N` for who a change reaches hop by hop, plus the tests to run |
-| `scripts/check-file-size.mjs` | 450-line ceiling with a shrink-only allowlist; its failure text says how to get out (split, or list a generated file in `.file-size-allow`) |
+| `scripts/code-size.mjs`, `scripts/code-size-cfamily.mjs`, `scripts/code-size-python.mjs` | the code-line counter the size check and the map share: TS/JS through the project's TypeScript compiler (approximate, without function sizes, when `typescript` is not installed), Python, Go and Rust through string- and comment-aware lexers; always copied with them |
+| `scripts/check-code-size.mjs` | the size caps, in code lines: 400 per file and 100 per function by default (`--max-code`, `--warn-code`, `--max-fn`, `--warn-fn`), a warning band from 320 / 60 that never fails, and a shrink-only ratchet (`.code-size-ratchet`, `--write-ratchet`, `--tighten`). Its failure text steers to the design fix (move the job that grew into a module named after it) |
 | `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist; build output (`dist/`, `build/`, `.next/` …) never counts as missing, and a framework creator's docs listed in `scripts/doc-paths-stock.json` (path → sha256) are skipped until edited |
 | `scripts/check-module-owners.mjs` | fails when a module under a source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
-| `scripts/check-structure.mjs` | all of the above as one command; picks the source roots from the project kind when `--root` is not given |
+| `scripts/check-structure.mjs` | all of the above as one command; picks the source roots from the project kind when `--root` is not given, hands the map and the size check the same caps, and prints failing checks last so a reader of the tail sees them |
 | `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--depth N` → the declarations that use it, those that use them, N hops out, and the tests to run; `--duplicates` → exported names declared twice. Needs `typescript` as a dev dependency |
 | `scripts/refs-hint-hook.mjs` | TS/JS only, optional: a Claude Code hook that suggests `npm run refs -- <Name>` when an agent greps for a code symbol (step 3) |
 | `assets/module-seals.test.ts` (vitest) or `assets/test_module_seals.py` (pytest) | seals (import only through the front door) and forbidden dependencies (never import X), both tables start empty |
@@ -111,7 +113,7 @@ The checks only work if they run without anyone remembering. For a Node project:
   "deps": "node scripts/codebase-map.mjs --deps",
   "refs": "node scripts/code-refs.mjs",
   "check:map": "node scripts/codebase-map.mjs --check",
-  "check:size": "node scripts/check-file-size.mjs",
+  "check:size": "node scripts/check-code-size.mjs",
   "check:doc-paths": "node scripts/check-doc-paths.mjs",
   "check:owners": "node scripts/check-module-owners.mjs",
   "check": "npm run check:size && npm run check:doc-paths && npm run check:owners && npm run check:map && npm test",
@@ -149,7 +151,7 @@ the repo root: `Cargo.toml` → `src`; `go.mod` → `internal/`, `cmd/`, `pkg/`
 (those present); `package.json` → `src`, or the framework's own layout when
 there is no `src/` (SvelteKit's `src/lib`, the `app/` dir of a Next
 app-router or React Router (formerly Remix) project); `pyproject.toml` or nothing → `src`.
-Pass `--root` (repeatable), `--max-loc` or `--entry <module>` when that
+Pass `--root` (repeatable), the size caps or `--entry <module>` when that
 doesn't fit: a Python `src/<package>/` layout keeps its modules one level
 down (`--root src/<package>`, or the scripts see one module), and a flat Go
 layout names its package folders explicitly.
@@ -163,8 +165,8 @@ workflow rather than creating one unasked.
 
 Use `references/templates.md`. Create:
 
-- `AGENTS.md`: rules, commands, layout, the 450-line rule, coupling rules,
-  growth rules. Under ~100 lines, because it loads into every session.
+- `AGENTS.md`: rules, commands, layout, the size rule (code-line caps, why,
+  and the commit-naming rule below), coupling rules, growth rules. Under ~100 lines, because it loads into every session.
 - `ARCHITECTURE.md`: read-these-first, request flow, subsystem table. For a
   brand-new project, fill in what exists and leave the table ready to grow. Don't
   invent subsystems that haven't been built.
@@ -194,7 +196,10 @@ AGENTS.md's coupling section.
 A check that never failed hasn't been tested. Run `check` and confirm it's
 green, then prove each gate catches a real violation:
 
-- Add a 460-line throwaway source file → `check:size` fails.
+- Add a throwaway source file with 401 code lines → `check:size` fails, naming
+  it; add 500 comment lines to a 330-line file → it passes with that file in the
+  warning band (comments are free). A function with 101 own lines fails; the
+  same lines split into an inner callback do not count toward the outer one.
 - Put a backticked `src/does-not-exist.ts` in ARCHITECTURE.md → `check:doc-paths` fails.
 - Add a module without regenerating the map → `check:map` fails.
 - Add a module with no ARCHITECTURE.md row or AGENTS.md → `check:owners` fails.
@@ -210,13 +215,13 @@ green, then prove each gate catches a real violation:
 - Rust (a scratch crate: `src/main.rs` with `mod auth; mod store;`,
   `src/auth.rs` using `crate::store::Db`, `src/store/mod.rs` + `db.rs`): the
   map lists `src/auth.rs` and `src/store/` with auth depending on store; with no
-  row for `src/store/`, `check:owners` fails; a 460-line `src/big.rs` fails
-  `check:size`.
+  row for `src/store/`, `check:owners` fails; a `src/big.rs` with 401 code lines
+  fails `check:size`.
 - Go (a scratch module: `go.mod`, `cmd/app/main.go` importing
   `<module>/internal/auth`, which imports `<module>/internal/store`): the map
   lists `cmd/app/`, `internal/auth/`, `internal/store/` and both edges, with
   `cmd/app/` as the entrypoint; with no row for `internal/store/`,
-  `check:owners` fails; a 460-line `internal/auth/big.go` fails `check:size`.
+  `check:owners` fails; an `internal/auth/big.go` with 401 code lines fails `check:size`.
 
 Revert every probe, re-run `check` green, and report each probe's outcome
 honestly. If one didn't fail, the wiring is wrong. Fix it before finishing.
@@ -228,15 +233,43 @@ tell the user what exists, which commands to run, and the growth rules now
 written in AGENTS.md. The project doesn't depend on this skill to stay
 healthy, because the rules live in the repo.
 
-## File size: why 450
+## The size rule: what it is for, and how it is met
 
-Smaller files help an agent as well as a person. A file under ~450 lines can
-usually be read whole in one pass and holds one idea, so the agent edits with
-the full picture instead of a window. The cost runs the other way too: dozens
-of 30-line files scatter one concept across many reads. So the goal is
-**one responsibility per file**, and the ceiling is the alarm that a file has
-started doing two jobs. 450 is the default for new projects. Existing repos keep
-their own limit.
+The rule exists so an agent can navigate the repo and know where things are. A
+file or function that does one job can be read whole in one pass, so the agent
+edits with the full picture instead of a window. The cost runs the other way
+too: dozens of 30-line files scatter one concept across many reads. So the goal
+is **one responsibility per file and per function**, and the caps are the alarm
+that one has started doing two jobs.
+
+How it is counted, and why: only **code lines** count (a line holding a token
+that is not a comment or whitespace). A rule that counts comment and blank lines
+(about a third of a typical file) gets met by deleting documentation, which is
+the opposite of navigable. Two caps, because a file cap alone does not stop
+one function absorbing every new job:
+
+| | cap | warning from | new-project default |
+|---|---|---|---|
+| file | code lines | `--warn-code` | 400 / 320 |
+| function (its own lines; nested functions count for themselves) | code lines | `--warn-fn` | 100 / 60 |
+
+Function sizes are measured for TS/JS (the project's TypeScript compiler), Python
+(`def`) and Go and Rust (`func` / `fn` bodies, by bracket matching over a lexer
+that masks strings, chars and comments). Plain JS without `typescript` installed
+gets an approximate file count and no function sizes; the check says so.
+
+How it must be met: near or over a cap, find the job that grew and move it into
+a module (or function) named after that job. Never delete comments to fit, and
+never name the split after the limit ("part 2", "helpers2", "under the 400-line
+cap"). The same goes for commit subjects: name the commit after what moved and
+why, never the size rule. A repo with git hooks can enforce that with a
+`commit-msg` check; a built project gets the rule in its AGENTS.md instead, since
+the kit installs no hooks. The warning band is listed in the check's output and
+in the codebase map's "Nearing the size cap" section, so the split happens along
+a seam before the cap forces one.
+
+Existing repos: measure, then set caps with the user (`references/retrofit.md`);
+what is already over is seeded into the ratchet once and only shrinks.
 
 ## Siblings
 
