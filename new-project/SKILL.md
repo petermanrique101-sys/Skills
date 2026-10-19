@@ -83,10 +83,10 @@ The project must own its checks. CI and other machines can't reach
 
 | From this skill | Purpose |
 |---|---|
-| `scripts/project-languages.mjs` | the language table (JS/TS, Python, Rust, Go) the map, the owner check and `check-structure` import; always copied with them |
+| `scripts/project-languages.mjs` | the language table (JS/TS, Python, Rust, Go) the map, the owner check, the doc-path check and `check-structure` import; always copied with them |
 | `scripts/codebase-map.mjs` | writes `docs/codebase-map.md` (modules, importers, dependencies, cycles); `--check` for build; `--deps <path>` for "who imports this module"; `--deps <path> --depth N` for who a change reaches hop by hop, plus the tests to run |
 | `scripts/check-file-size.mjs` | 450-line ceiling with a shrink-only allowlist; its failure text says how to get out (split, or list a generated file in `.file-size-allow`) |
-| `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist |
+| `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist; build output (`dist/`, `build/`, `.next/` …) never counts as missing, and a framework creator's docs listed in `scripts/doc-paths-stock.json` (path → sha256) are skipped until edited |
 | `scripts/check-module-owners.mjs` | fails when a module under a source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
 | `scripts/check-structure.mjs` | all of the above as one command; picks the source roots from the project kind when `--root` is not given |
 | `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--depth N` → the declarations that use it, those that use them, N hops out, and the tests to run; `--duplicates` → exported names declared twice. Needs `typescript` as a dev dependency |
