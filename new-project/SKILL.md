@@ -86,12 +86,12 @@ The project must own its checks. CI and other machines can't reach
 |---|---|
 | `scripts/project-languages.mjs` | the language table (JS/TS, Python, Rust, Go) the map, the owner check, the doc-path check and `check-structure` import; always copied with them |
 | `scripts/codebase-map.mjs` | writes `docs/codebase-map.md` (modules, importers, dependencies, cycles); `--check` for build; `--deps <path>` for "who imports this module"; `--deps <path> --depth N` for who a change reaches hop by hop, plus the tests to run |
-| `scripts/code-size.mjs`, `scripts/code-size-cfamily.mjs`, `scripts/code-size-python.mjs` | the code-line counter the size check and the map share: TS/JS through the project's TypeScript compiler (approximate, without function sizes, when `typescript` is not installed), Python, Go and Rust through string- and comment-aware lexers; always copied with them |
+| `scripts/code-size.mjs`, `scripts/code-size-cfamily.mjs`, `scripts/code-size-python.mjs` | the code-line counter the size check and the map share: TS/JS through the TypeScript compiler API, found by `scripts/typescript-api.mjs` (approximate, without function sizes, when no TypeScript with that API is found), Python, Go and Rust through string- and comment-aware lexers; always copied with them |
 | `scripts/check-code-size.mjs` | the size caps, in code lines: 400 per file and 100 per function by default (`--max-code`, `--warn-code`, `--max-fn`, `--warn-fn`), a warning band from 320 / 60 that never fails, and a shrink-only ratchet (`.code-size-ratchet`, `--write-ratchet`, `--tighten`). Its failure text steers to the design fix (move the job that grew into a module named after it) |
 | `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist; build output (`dist/`, `build/`, `.next/` …) never counts as missing, and a framework creator's docs listed in `scripts/doc-paths-stock.json` (path → sha256) are skipped until edited |
 | `scripts/check-module-owners.mjs` | fails when a module under a source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
 | `scripts/check-structure.mjs` | all of the above as one command; picks the source roots from the project kind when `--root` is not given, hands the map and the size check the same caps, and prints failing checks last so a reader of the tail sees them |
-| `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--depth N` → the declarations that use it, those that use them, N hops out, and the tests to run; `--duplicates` → exported names declared twice. Needs `typescript` as a dev dependency |
+| `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--depth N` → the declarations that use it, those that use them, N hops out, and the tests to run; `--duplicates` → exported names declared twice. Needs a TypeScript with the compiler API (TypeScript 5 or 6; `--typescript <dir>` points at one) |
 | `scripts/refs-hint-hook.mjs` | TS/JS only, optional: a Claude Code hook that suggests `npm run refs -- <Name>` when an agent greps for a code symbol (step 3) |
 | `assets/module-seals.test.ts` (vitest) or `assets/test_module_seals.py` (pytest) | seals (import only through the front door) and forbidden dependencies (never import X), both tables start empty |
 
@@ -253,10 +253,15 @@ one function absorbing every new job:
 | file | code lines | `--warn-code` | 400 / 320 |
 | function (its own lines; nested functions count for themselves) | code lines | `--warn-fn` | 100 / 60 |
 
-Function sizes are measured for TS/JS (the project's TypeScript compiler), Python
+Function sizes are measured for TS/JS (the TypeScript compiler API), Python
 (`def`) and Go and Rust (`func` / `fn` bodies, by bracket matching over a lexer
-that masks strings, chars and comments). Plain JS without `typescript` installed
-gets an approximate file count and no function sizes; the check says so.
+that masks strings, chars and comments). TS/JS needs a `typescript` package that
+exposes the compiler API: TypeScript 5 or 6. TypeScript 7's package (the native
+compiler, which current Vite templates pin) exports only its version, so in such
+a project pass `--typescript <dir of a TypeScript 5/6 package>` to
+`check-structure.mjs` (or set `STRUCTURE_TYPESCRIPT`); a harness that runs a
+project's check hands over its own copy this way. Without one, the check gets an
+approximate file count and no function sizes, and says why; it never crashes.
 
 How it must be met: near or over a cap, find the job that grew and move it into
 a module (or function) named after that job. Never delete comments to fit, and
