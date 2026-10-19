@@ -152,9 +152,11 @@ Apply these defaults:
 
 - **Edit existing files over creating new ones.** A new file is a new place to
   maintain. Earn it.
-- **One responsibility per module.** No god files. If a file is creeping past
-  ~400 LOC, that's a smell — stop and run `/refactor-godfiles` on it (or split
-  it yourself) before adding more. Don't let the smell pass silently because
+- **One responsibility per module.** No god files. If a file or function is nearing
+  its size cap (code lines; comments are free), that's a smell — stop, find the
+  job that grew, and move it into a module named after that job (or run
+  `/refactor-godfiles`) before adding more. Never cut comments to fit, and never
+  name the split after the limit. Don't let the smell pass silently because
   the current task is small.
 - **No dead code, no commented-out blocks, no TODO graveyards.** If it's
   unused, delete it. Git remembers.

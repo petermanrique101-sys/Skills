@@ -146,7 +146,7 @@ End with: "Proceed with the work above." Do **not** start implementing in this s
 - `/find-duplicate-systems` — **backward-looking**. Audits what duplication already exists. Run when consolidation is the goal.
 - `/canonical-check` (this) — **forward-looking**. Prevents new duplication from being created. Run before any subsystem work.
 - `/senior-engineer` — the implementation methodology that runs *after* this skill's verdict.
-- `/refactor-godfiles` — splits oversized files. If the canonical is >400 LOC, recommend splitting it first rather than extending a god file.
+- `/refactor-godfiles` — splits oversized files. If the canonical is over or near its code-line size cap, recommend moving the job that grew into its own module first rather than extending a god file.
 
 ## One-liner
 
