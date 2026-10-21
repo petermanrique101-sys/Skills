@@ -36,6 +36,7 @@ the map wins.
 | Who depends on a module | `<npm run deps -- src/<module>>` |
 | Who uses a function, class, type or member | `<npm run refs -- <Name>>` (or `<Class.member>`, `<file>#<Name>`) |
 | Exported names declared in two places | `<npm run refs -- --duplicates>` |
+| A name declared in two source roots (apps, packages) | `<npm run check:canonical>` |
 | How far a change reaches, hop by hop, and the tests to run | `<npm run refs -- <Name> --depth 2>` (declarations), `<npm run deps -- <path> --depth 2>` (files) |
 
 ## Layout
@@ -54,7 +55,7 @@ the map wins.
   - `.code-size-ratchet` lists what was over a cap when the caps were adopted (a retrofit; a new project has none), at its recorded size. It may only shrink.
 - **One responsibility per file and per module.** A new capability gets its own module, not a corner of an existing one.
 - **Import a module through its public entry.** If you need an internal, export it from the entry. Enforced by the module-seal test.
-- **Extend the existing owner.** Before writing a new subsystem, find the module that owns the concern (ARCHITECTURE.md) and extend it. Before writing a function, run `refs` / `--duplicates` for the name you'd give it.
+- **Extend the existing owner.** Before writing a new subsystem, find the module that owns the concern (ARCHITECTURE.md) and extend it. Before writing a function, run `refs` / `--duplicates` for the name you'd give it. Something both apps need goes in `<the shared package>` and is imported, never copied: `<check:canonical>` fails on a second copy.
 - **Read before you edit.** Open the file and its module guide first.
 
 ## Coupling rules

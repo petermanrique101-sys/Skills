@@ -29,11 +29,15 @@ node <skill>/scripts/check-doc-paths.mjs                 # all live docs
 node <skill>/scripts/check-doc-paths.mjs AGENTS.md ARCHITECTURE.md <nested guides>   # guidance only
 node <skill>/scripts/check-module-owners.mjs --root <src>   # modules nobody wrote down
 node <skill>/scripts/code-refs.mjs --duplicates            # TS/JS: exported names declared twice
+node <skill>/scripts/check-canonical.mjs --root <src> ... --canonical <shared root>   # several roots: one job written twice
 ```
 
-The map's "Module cycles" section and `--duplicates` are where parallel
-implementations show up: two modules that each claim the same job usually
-share a name, or reach each other.
+The map's "Module cycles" section, `--duplicates` and check-canonical are where
+parallel implementations show up: two modules that each claim the same job
+usually share a name, or reach each other. `--duplicates` reads one TypeScript
+project; check-canonical compares source roots, which is where a monorepo
+drifts (web and mobile each writing the same service, an app re-declaring the
+shared package's types).
 
 If the repo already has its own map generator, compare totals with it. A
 mismatch is a finding about one of the two generators.
@@ -53,8 +57,9 @@ For each item, collect evidence with `file:line`:
 3. **Prose coupling.** Run the grep in `registry-pattern.md`. Each "also update X"
    is an unenforced coupling and becomes a test.
 4. **Unowned modules and second owners.** Every module check-module-owners lists,
-   and every pair of modules claiming the same job (`--duplicates` hits, two
-   headers that both say "the single owner of X"). The second kind is the one
+   and every pair of modules claiming the same job (`--duplicates` hits,
+   check-canonical findings, its "mirrors X" comments, two headers that both say
+   "the single owner of X"). The second kind is the one
    agents created; it gets a consolidation, not a doc row.
 5. **Runtime couplings.** Inventory the kinds in `couplings.md` the import graph
    can't see: event names, shared metadata keys, persisted formats, text parsed
@@ -106,4 +111,6 @@ the size check on a repo with existing violators means seeding the ratchet once
 (`--write-ratchet`: every file and function over a cap, at its size, sorted, so
 the same tree always writes the same file). After that an entry may only
 shrink (`--tighten` locks a shrink in and drops what is back under the cap).
-Never raise a cap or re-seed the ratchet to make the check pass.
+Never raise a cap or re-seed the ratchet to make the check pass. Adopting
+check-canonical is the same: `--write-ratchet` once, a `# note` on each pair that
+must exist (each app's own client), and the rest is debt that only goes down.
