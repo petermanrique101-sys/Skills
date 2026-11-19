@@ -1,6 +1,6 @@
 ---
 name: new-project
-description: Set up a repo (JS/TS, Python, Rust, Go, Kotlin, Java, Swift, C#, C/C++ or Dart) so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), code-line size caps per file and per function (comments are free) with a shrink-only ratchet, a module-owner check so no module exists without a stated owner, a canonical-drift check that fails when a function or type is written again in another app or package of a monorepo, symbol-level references from the TypeScript compiler with multi-hop "what does this change reach" (and the tests to run), an optional hook that steers grep toward those references, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
+description: Set up a repo (JS/TS, Python, Rust, Go, Kotlin, Java, Swift, C#, C/C++ or Dart) so AI agents (and people) can navigate it fast and change it without whack-a-mole — rules file (AGENTS.md), architecture map, a generated codebase map the build keeps fresh (with module cycles), code-line size caps per file and per function (comments are free) with a shrink-only ratchet, a module-owner check so no module exists without a stated owner, a canonical-drift check that fails when a function or type is written again in another file, or in another app or package of a monorepo, symbol-level references from the TypeScript compiler with multi-hop "what does this change reach" (and the tests to run), an optional hook that steers grep toward those references, module seal and forbidden-dependency tests, a coupling classification that installs the right check for each kind of runtime coupling (registries, events, shared keys, persisted formats, parsed text, protocols), a doc-path checker, ADRs, and a history folder. Use when the user invokes /new-project, starts a new project/repo/app/service, asks to "set up the repo structure", "make the codebase easier for AI to navigate", "stop breaking things when we change stuff", or wants to bring an EXISTING repo up to this standard (retrofit mode — audit and report first). Also use before /app-build or /grand-daddy-green scaffolding so the structure exists from commit one.
 user-invocable: true
 allowed-tools:
   - Read
@@ -97,7 +97,7 @@ The project must own its checks. CI and other machines can't reach
 | `scripts/check-code-size.mjs` | the size caps, in code lines: 400 per file and 100 per function by default (`--max-code`, `--warn-code`, `--max-fn`, `--warn-fn`), a warning band from 320 / 60 that never fails, and a shrink-only ratchet (`.code-size-ratchet`, `--write-ratchet`, `--tighten`). Its failure text steers to the design fix (move the job that grew into a module named after it) |
 | `scripts/check-doc-paths.mjs` | fails when a live doc names a path that doesn't exist; build output (`dist/`, `build/`, `.next/` …) never counts as missing, and a framework creator's docs listed in `scripts/doc-paths-stock.json` (path → sha256) are skipped until edited |
 | `scripts/check-module-owners.mjs` | fails when a module under a source root has neither its own AGENTS.md nor an ARCHITECTURE.md row |
-| `scripts/check-canonical.mjs`, `scripts/canonical-drift.mjs` | canonical drift across source roots (a monorepo's apps, packages, functions): fails when a name the canonical root (`--canonical`, the shared package) exports is declared again elsewhere, or a name is exported from two other roots, i.e. one job implemented twice. Shrink-only ratchet (`.canonical-drift`, `--write-ratchet`, `--tighten`; a `# note` marks a pair that must exist). Also lists comments that admit a copy ("mirrors X", "keep in sync"). One root: nothing to compare, passes |
+| `scripts/check-canonical.mjs`, `scripts/canonical-drift.mjs` | canonical drift, i.e. one job implemented twice, found by name in every language the kit reads: fails when a name is exported from two files of one source root (*repeat*), when a name the canonical root (`--canonical`, the shared package) exports is declared again in another root (*shadow*), or when a name is exported from two other roots (*duplicate*). Shrink-only ratchet (`.canonical-drift`, `--write-ratchet`, `--tighten`) recording each name's roots and file count, so a third copy of a listed name fails too; a `# note` marks a copy that must exist. `--exclude <regex>` keeps vendored or synced copies out. Also lists comments that admit a copy ("mirrors X", "keep in sync") |
 | `scripts/check-structure.mjs` | all of the above as one command (`--canonical` passes through to the map and the drift check); picks the source roots from the project kind when `--root` is not given, hands the map and the size check the same caps, and prints failing checks last so a reader of the tail sees them |
 | `scripts/code-refs.mjs` | TS/JS only: `<Name>`, `<Class.member>`, `<file>#<Name>` → every use, by the compiler's resolution; `--depth N` → the declarations that use it, those that use them, N hops out, and the tests to run; `--duplicates` → exported names declared twice. Needs a TypeScript with the compiler API (TypeScript 5 or 6; `--typescript <dir>` points at one) |
 | `scripts/refs-hint-hook.mjs` | TS/JS only, optional: a Claude Code hook that suggests `npm run refs -- <Name>` when an agent greps for a code symbol (step 3) |
@@ -140,10 +140,14 @@ The checks only work if they run without anyone remembering. For a Node project:
 `check:owners` is the discovery gate made mechanical: a new module can't land
 until someone has written down what it owns and what it doesn't, which is the
 moment a duplicate of an existing module gets noticed. `check:canonical` is
-the same gate one level down: with several source roots, a function or type
-can't be written a second time in another app without the build saying so.
-Give it (and `docs:map`) the roots and `--canonical <shared package root>`;
-a single-root project can leave it out. `refs` is on demand, never in the build.
+the same gate one level down: a function or type can't be exported a second
+time, from another file or another app, without the build saying so. Every
+project runs it, single-root ones included; a monorepo gives it (and
+`docs:map`) the roots and `--canonical <shared package root>`. Adopt it with
+`--write-ratchet` so what exists today is recorded debt and only new copies
+fail. `refs` is on demand, never in the build: `refs --duplicates` is the
+compiler's view of the same question for one TypeScript project, useful in a
+review, while `check:canonical` is the gate.
 
 What no script catches is one job built twice under different names and
 shapes (two permission checks, two retry loops). That stays a judgment call:
@@ -238,6 +242,8 @@ green, then prove each gate catches a real violation:
 - Put a backticked `src/does-not-exist.ts` in ARCHITECTURE.md → `check:doc-paths` fails.
 - Add a module without regenerating the map → `check:map` fails.
 - Add a module with no ARCHITECTURE.md row or AGENTS.md → `check:owners` fails.
+- Export the same name from two files of one root → `check:canonical` fails; after
+  `--write-ratchet`, export it from a third file → it fails again.
 - Several roots: export the same name from two non-canonical roots → `check:canonical`
   fails; declare a private copy of a canonical export → it fails as a shadow; a
   re-export (`export { x } from`) and a test file declaring the name pass.
